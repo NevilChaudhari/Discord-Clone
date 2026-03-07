@@ -32,7 +32,7 @@ export default function Main() {
       router.push("/login"); // redirect if not logged in
     } else {
       // Optional: redirect to home or channels if logged in
-      router.push("/channels/@me");
+      router.push("/channels");
     }
   }, [session, router]);
 
