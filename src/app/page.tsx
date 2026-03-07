@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { uploadToImgBB } from "@/lib/imgbb";
 import { useRouter } from "next/navigation";
 import { signOut } from "@/services/auth";
+import { IconBasketFilled, IconBrandSafari, IconChevronDown, IconDiamondFilled, IconDownload, IconHeadphonesFilled, IconHeadphonesOff, IconHelpFilled, IconInbox, IconMicrophone, IconMicrophoneOff, IconPlus, IconSettingsFilled, IconUserFilled, IconX, IconZoomQuestionFilled } from "@tabler/icons-react";
 
 export default function Home() {
   const router = useRouter();
@@ -12,7 +13,10 @@ export default function Home() {
   const [session, setSession] = useState<any>(null);
   const [file, setFile] = useState<File | null>(null);
   const [profile, setProfile] = useState('https://i.ibb.co/7tKbDGFX/default-profile.jpg');
+  const [username, setUsername] = useState('username');
   const [uid, setUid] = useState('');
+  const [mute, setMute] = useState(true);
+  const [deafen, setDeafen] = useState(false);
 
   useEffect(() => {
     if (session === null) return;
@@ -68,16 +72,170 @@ export default function Home() {
       return;
     }
     setProfile(data?.profile);
+    setUsername(data?.username);
   };
 
   return (
-    <div>
-      <span>{session ? session.user.email : "Not logged in"}</span><br />
-      <span>{profile}</span>
-      {profile != '' && (<img src={profile} className="w-100 h-100" />)}
-      <input type="file" className="border" onChange={(e) => setFile(e.target.files?.[0] || null)} /><br />
-      <button className=" px-5 py-5 border cursor-pointer" onClick={handleUpload}>Upload</button><br />
-      <button className=" px-5 py-5 border cursor-pointer bg-red-400" onClick={handleLogout}>Logout</button>
+    <div className="bg-[#121214] w-screen h-dvh overflow-hidden flex flex-col">
+      {/* Header */}
+      <div className="relative min-h-10 w-full flex items-center justify-center">
+        <div className="absolute flex gap-5 w-auto right-0 px-2">
+          <IconInbox stroke={2} className="hover:text-white text-[#808080] cursor-pointer" />
+          <IconHelpFilled className="hover:text-white text-[#808080] cursor-pointer" />
+        </div>
+        <IconUserFilled color="gray" size={20} />
+        <span className="text-sm">Friends</span>
+      </div>
+
+      {/* Body */}
+      <div className="flex h-screen">
+
+        {/* Left Side */}
+        <div className="w-85 h-full flex flex-col">
+          <div className="w-full flex-1 min-h-0 flex">
+            {/* Servers/Friends List */}
+            <div className="w-15 flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto overflow-x-hidden hide-scrollbar">
+
+              {/* Direct Message Tab */}
+              <div className="flex">
+                <div className="flex gap-2 items-center justify-center">
+                  <div className="bg-white h-full w-1 rounded-r-md"></div>
+                  <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/10 hover:bg-[#5865f2] cursor-pointer">
+                    <div className="w-7 h-auto overflow-hidden rounded-xl">
+                      <img src="./discord-logo.webp" alt="Direct Message" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Server-template */}
+              <div className="flex">
+                <div className="flex gap-2 items-center justify-center group">
+                  <div className="bg-white h-2 w-1 rounded-r-md group-hover:h-5"></div>
+                  <div className="w-10 h-auto overflow-hidden rounded-xl cursor-pointer">
+                    <img src="./Discord.jpg" alt="Direct Message" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Add Servver */}
+              <div className="flex">
+                <div className="flex gap-2 items-center justify-center group">
+                  <div className="h-2 w-1"></div>
+                  <div className="w-10 h-10 rounded-xl cursor-pointer flex items-center justify-center bg-white/10 hover:bg-[#5865f2]">
+                    <IconPlus stroke={2} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Explore Servvers */}
+              <div className="flex">
+                <div className="flex gap-2 items-center justify-center group">
+                  <div className="h-2 w-1"></div>
+                  <div className="w-10 h-10 rounded-xl cursor-pointer flex items-center justify-center bg-white/10 hover:bg-[#5865f2]">
+                    <IconBrandSafari stroke={2} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Download Apps */}
+              <div className="flex">
+                <div className="flex gap-2 items-center justify-center group">
+                  <div className="h-2 w-1"></div>
+                  <div className="w-10 h-10 rounded-xl cursor-pointer flex items-center justify-center bg-white/10 hover:bg-[#5865f2]">
+                    <IconDownload stroke={2} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Server - Channels */}
+            <div className="w-70 h-full border-t border-l rounded-tl-xl border-[#303034] bg-[#121214]">
+              {/* Header */}
+              <div className="h-10 w-full border-b border-[#303034] px-2 py-1">
+                <button className="bg-white/5 hover:bg-white/10 cursor-pointer rounded-md w-full h-full text-sm">Find or start a conversation</button>
+              </div>
+
+              {/* Body(Friends) */}
+              <div className="w-full h-full flex flex-col p-3">
+                <div className="w-full h-auto flex flex-col border-b border-[#303034]">
+                  <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconUserFilled /> Friends</button>
+                  <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconDiamondFilled /> Nitro</button>
+                  <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconBasketFilled /> Shop</button>
+                  <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconZoomQuestionFilled /> Quest</button>
+                </div>
+
+                {/* Friends Tab */}
+                <div className="w-full h-auto flex flex-col py-2">
+                  <div className="flex hover:text-white text-white/50 place-content-between">
+                    <span className="text-sm p-2">Direct Messages</span>
+                    <button className="cursor-pointer"><IconPlus stroke={2} size={20} /></button>
+                  </div>
+                  <div className="flex items-center p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white place-content-between">
+                    <div className="flex gap-3 items-center">
+                      <div className="rounded-full overflow-hidden w-8 h-8">
+                        <img src="https://i.ibb.co/7tKbDGFX/default-profile.jpg" alt="" />
+                      </div>
+                      Friend
+                    </div>
+                    <IconX stroke={2} size={20} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom */}
+          <div className="w-full h-18 p-2">
+            <div className="w-full h-full border border-[#303034] rounded-md bg-[#202024] flex gap-2 items-center px-1">
+              <div className="flex items-center gap-3 hover:bg-[#333338] h-[90%] w-1/2 rounded-md cursor-pointer">
+                {/* Profile Pic */}
+                <div className="rounded-full w-8 h-8 overflow-hidden">
+                  <img src={profile} alt="Profile Image" className="object-cover w-full h-full" />
+                </div>
+
+                {/* Username/Status */}
+                <div className="flex flex-col">
+                  <span className="font-semibold text-md">{username}</span>
+                  <span className="text-xs text-gray-300">Online</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 h-[90%] w-1/2">
+                {/* Microphone */}
+                <div className={`flex rounded-md ${mute ? 'bg-red-900/20' : 'bg-transparent'} group`}>
+                  <div className={`border-r border-[#202024] cursor-pointer p-2 ${mute ? 'hover:bg-red-600/20' : 'hover:bg-white/20 group-hover:bg-white/5'} rounded-l-md`} onClick={() => setMute(!mute)}>
+                    {!mute && (<IconMicrophone stroke={1} size={20} />)}
+                    {mute && (<IconMicrophoneOff size={20} color="red" />)}
+                  </div>
+                  <div className={`flex items-center ${mute ? 'hover:bg-red-600/20' : 'hover:bg-white/20 group-hover:bg-white/5'} rounded-r-md cursor-pointer`}>
+                    <IconChevronDown stroke={2} size={20} color={`${mute ? "red" : "white"}`} />
+                  </div>
+                </div>
+
+                {/* Deafen */}
+                <div className={`flex rounded-md ${deafen ? 'bg-red-900/20' : 'bg-transparent'} group`}>
+                  <div className={`border-r border-[#202024] cursor-pointer p-2 ${deafen ? 'hover:bg-red-600/20' : 'hover:bg-white/20 group-hover:bg-white/5'} rounded-l-md`} onClick={() => setDeafen(!deafen)}>
+                    {!deafen && (<IconHeadphonesFilled size={20} />)}
+                    {deafen && (<IconHeadphonesOff stroke={2} size={20} color="red" />)}
+                  </div>
+                  <div className={`flex items-center ${deafen ? 'hover:bg-red-600/20' : 'hover:bg-white/20 group-hover:bg-white/5'} rounded-r-md cursor-pointer`}>
+                    <IconChevronDown stroke={2} size={20} color={`${deafen ? "red" : "white"}`} />
+                  </div>
+                </div>
+
+                <div className="hover:bg-white/10 rounded-md p-1 cursor-pointer">
+                  <IconSettingsFilled size={20} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side */}
+        <div className="h-full w-full bg-[#1a1a1e] border-t border-[#303034]">
+          <div className="h-10 w-full border-b border-[#303034]"></div>
+        </div>
+      </div>
     </div>
   );
 }
