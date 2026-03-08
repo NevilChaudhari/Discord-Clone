@@ -9,10 +9,13 @@ import { supabase } from "@/lib/supabase";
 import { uploadToImgBB } from "@/lib/imgbb";
 import MessagesPage from '@/components/messagesPage';
 import { v4 as uuidv4 } from 'uuid';
+import { Oval, TailSpin } from "react-loader-spinner";
+import { customAlphabet } from "nanoid";
 
 interface Servers {
     id: string;
     name: string;
+    icon: string;
 }
 interface Channels {
     id: string;
@@ -21,7 +24,7 @@ interface Channels {
     serverId: string;
 }
 
-interface user{
+interface user {
     id: string;
     email: string;
     username: string;
@@ -41,7 +44,7 @@ export default function ChannelsLayout() {
     const [username, setUsername] = useState('username');
     const [uid, setUid] = useState('');
     const [selectedServer, setSelectedServer] = useState<string | null>("me");
-    const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
+    const [selectedServerId, setSelectedServerId] = useState<string | null>('me');
     const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
     const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
     const [servers, setServers] = useState<Servers[]>([]);
@@ -53,6 +56,9 @@ export default function ChannelsLayout() {
     const [channelType, setChannelType] = useState("text");
     const [channelName, setChannelName] = useState("");
     const [serverName, setServerName] = useState("");
+    const [preview, setPreview] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+
 
     useEffect(() => {
         if (session === undefined) return; // still loading
@@ -79,24 +85,20 @@ export default function ChannelsLayout() {
         getSession();
     }, []);
 
-    const handleUpload = async () => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setLoading(true); // start spinner
         try {
-            if (!file) return;
-            const url = await uploadToImgBB(file);
-
-            const { data, error } = await supabase
-                .from("users")
-                .update({ profile: url })
-                .eq("id", uid);
-
-            if (error) throw error;
-            getProfile(uid);
-
+            const { url, deleteUrl } = await uploadToImgBB(file);
+            setPreview(url);
         } catch (err) {
             console.error(err);
-            return null;
+        } finally {
+            setLoading(false); // stop spinner regardless of success/failure
         }
-    }
+    };
 
     const handleLogout = async () => {
         await signOut();
@@ -115,14 +117,36 @@ export default function ChannelsLayout() {
     };
 
     const addServer = async (name: string) => {
+        if (!serverName) {
+            return;
+        }
         const id = uuidv4();
+        const nanoid = customAlphabet("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 6)
+        const serverCode = nanoid()
         // alert(id);
-        const { data, error } = await supabase.from("server").insert({ id: id, name: name });
+        const { data, error } = await supabase.from("server").insert({ id: id, name: name, icon: preview, serverCode: serverCode});
         if (error) {
             return;
         }
         getServers();
-        setAddServerUI(false)
+        setAddServerUI(false);
+        setPreview(null);
+        setServerName('');
+    };
+
+    const cancelServerCreation = async () => {
+        try {
+            // if (deleteUrl) {
+            //     await fetch(deleteUrl);
+            // }
+
+            setPreview(null);
+            setAddServerUI(false);
+            setServerName('');
+
+        } catch (err) {
+            console.error(err);
+        }
     };
 
     const removeServer = async (id: string) => {
@@ -146,6 +170,7 @@ export default function ChannelsLayout() {
 
             // Refresh server list or update state
             getServers();
+            setSelectedServerId('me')
         } catch (err) {
             console.error("Unexpected error deleting server:", err);
         }
@@ -210,19 +235,42 @@ export default function ChannelsLayout() {
                         </div>
                         <div className="flex flex-col items-center justify-center">
                             <div className="relative w-32 h-32">
-                                {/* <input
+                                <input
                                     type="file"
                                     ref={fileInputRef}
                                     className="hidden"
                                     accept="image/*"
-                                /> */}
+                                    onChange={handleFileChange}
+                                />
                                 <div
                                     onClick={openFilePicker}
-                                    className="w-full h-full rounded-full border-2 border-dashed border-gray-500 flex flex-col items-center justify-center text-gray-300 cursor-pointer"
+                                    className="w-full h-full rounded-full border-2 border-dashed border-gray-500 flex items-center justify-center text-gray-300 cursor-pointer relative overflow-hidden"
                                 >
-                                    <span className="text-xs mt-1 font-semibold tracking-wider">
-                                        UPLOAD
-                                    </span>
+                                    {preview ? (
+                                        <>
+                                            {loading && (
+                                                <div className="absolutes inset-0 flex items-center justify-center bg-black/20 z-10">
+                                                    <TailSpin
+                                                        visible={true}
+                                                        height="130"
+                                                        width="130"
+                                                        color="#615fff"
+                                                        ariaLabel="tail-spin-loading"
+                                                        radius="1"
+                                                    />
+                                                </div>
+                                            )}
+                                            <img
+                                                src={preview}
+                                                className={`absolute w-full h-full rounded-md object-cover ${loading ? 'opacity-0' : 'opacity-100'}`}
+                                                alt="Server Icon"
+                                            />
+                                        </>
+                                    ) : (
+                                        <button className="w-full h-full rounded-md flex items-center justify-center cursor-pointer">
+                                            Upload
+                                        </button>
+                                    )}
                                 </div>
 
                                 {/* Plus Button */}
@@ -233,7 +281,6 @@ export default function ChannelsLayout() {
                                 >
                                     +
                                 </button>
-
                             </div>
                         </div>
                         <div className="flex flex-col gap-2">
@@ -243,8 +290,8 @@ export default function ChannelsLayout() {
                             </div>
                         </div>
                         <div className="flex gap-2">
-                            <button onClick={() => setAddServerUI(false)} className="w-full rounded-md h-10 cursor-pointer text-white bg-white/5">Cancel</button>
-                            <button onClick={() => addServer(serverName)} className={`w-full rounded-md h-10 cursor-pointer ${serverName == '' ? 'bg-[#5865f2]/50 text-white/50' : 'bg-[#5865f2] text-white'}`}>Create Server</button>
+                            <button onClick={() => { cancelServerCreation() }} className="w-full rounded-md h-10 cursor-pointer text-white bg-white/5">Cancel</button>
+                            <button onClick={() => addServer(serverName)} disabled={!serverName} className={`w-full rounded-md h-10 cursor-pointer ${serverName == '' ? 'bg-[#5865f2]/50 text-white/50' : 'bg-[#5865f2] text-white'}`}>Create Server</button>
                         </div>
                     </div>
                 </div>
@@ -337,10 +384,10 @@ export default function ChannelsLayout() {
                         <div className="w-15 flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto overflow-x-hidden hide-scrollbar">
 
                             {/* Direct Message Tab */}
-                            <div onClick={() => setSelectedServer("me")} className="flex">
+                            <div onClick={() => setSelectedServerId("me")} className="flex">
                                 <div className="flex gap-2 items-center justify-center group">
-                                    <div className={`bg-white ${selectedServer == 'me' ? 'h-full' : 'h-2 group-hover:h-5'} w-1 rounded-r-md`}></div>
-                                    <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/10 hover:bg-[#5865f2] cursor-pointer">
+                                    <div className={`bg-white ${selectedServerId == 'me' ? 'h-full' : 'h-2 group-hover:h-5'} w-1 rounded-r-md`}></div>
+                                    <div className={`w-10 h-10 flex items-center justify-center rounded-xl ${selectedServerId == 'me' ? 'bg-[#5865f2]' : 'bg-white/10'} hover:bg-[#5865f2] cursor-pointer`}>
                                         <div className="w-7 h-auto overflow-hidden rounded-xl">
                                             <img src="../discord-logo.webp" alt="Direct Message" />
                                         </div>
@@ -348,14 +395,19 @@ export default function ChannelsLayout() {
                                 </div>
                             </div>
 
-                            {servers.map((server, index) => {
+                            {servers.map((server) => {
                                 return (
                                     <div key={server.id} onDoubleClick={() => removeServer(server.id)} onClick={() => { setSelectedServer(server.name); setSelectedServerId(server.id) }} className="flex">
                                         <div className="flex gap-2 items-center justify-center group">
                                             <div className={`bg-white ${selectedServerId == server.id ? 'h-full' : 'h-2 group-hover:h-5'} w-1 rounded-r-md`}></div>
-                                            <div className="w-10 h-10 overflow-hidden rounded-xl cursor-pointer bg-white/5 flex justify-center items-center">
-                                                <img src="../Discord.jpg" alt="Direct Message" />
-                                                {/* {server.name} */}
+                                            <div className="w-10 h-10 overflow-hidden rounded-xl cursor-pointer bg-white/5 flex justify-center items-center font-semibold">
+                                                {server.icon ? <img src={server.icon} alt="Direct Message" className="object-cover w-full h-full" /> :
+                                                    server.name
+                                                        .split(' ')
+                                                        .slice(0, 3)
+                                                        .map(word => word[0]?.toUpperCase())
+                                                        .join('')
+                                                }
                                             </div>
                                         </div>
                                     </div>
@@ -395,7 +447,7 @@ export default function ChannelsLayout() {
 
                         {/* Server - Channels */}
                         <div className="w-70 h-full border-t border-l rounded-tl-xl border-[#303034] bg-[#121214]">
-                            {selectedServer == 'me' && (<div className="flex flex-col">
+                            {selectedServerId == 'me' && (<div className="flex flex-col">
                                 {/* Header */}
                                 <div className="h-10 w-full border-b border-[#303034] px-2 py-1">
                                     <button className="bg-white/5 hover:bg-white/10 cursor-pointer rounded-md w-full h-full text-sm">Find or start a conversation</button>
@@ -428,7 +480,7 @@ export default function ChannelsLayout() {
                                     </div>
                                 </div>
                             </div>)}
-                            {selectedServer != 'me' && (<div className="flex flex-col">
+                            {selectedServerId != 'me' && (<div className="flex flex-col">
                                 {/* Header */}
                                 <div className="h-10 w-full border-b flex gap-2 border-[#303034] px-2 py-1">
                                     <span className="hover:bg-white/10 cursor-pointer flex items-center justify-center rounded-md w-full h-full font-semibold text-sm">{selectedServer}</span>
@@ -447,13 +499,21 @@ export default function ChannelsLayout() {
                                             </div>
                                             <IconPlus onClick={() => setAddChannelUI(true)} stroke={2} size={15} />
                                         </div>
-                                        {channels.map((server, index) => {
-                                            return (
-                                                <>
-                                                    {server.serverId == selectedServerId && server.type == 'text' && (<button key={index} onClick={() => { setSelectedChannel(server.name); setSelectedChannelId(server.id)}} className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer w-full hover:text-white ${selectedChannelId == server.id ? 'bg-[#2c2c30] text-white' : 'text-white/50'}`}><IconHash stroke={2} size={20} /> {server.name}</button>)}
-                                                </>
-                                            )
-                                        })}
+                                        {channels
+                                            .filter(channel => channel.serverId === selectedServerId && channel.type === 'text')
+                                            .map(channel => (
+                                                <button
+                                                    key={channel.id}
+                                                    onClick={() => {
+                                                        setSelectedChannel(channel.name);
+                                                        setSelectedChannelId(channel.id);
+                                                    }}
+                                                    className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer w-full hover:text-white ${selectedChannelId === channel.id ? 'bg-[#2c2c30] text-white' : 'text-white/50'
+                                                        }`}
+                                                >
+                                                    <IconHash stroke={2} size={20} /> {channel.name}
+                                                </button>
+                                            ))}
                                         <div className="flex items-center cursor-pointer text-sm place-content-between text-white/50 hover:text-white">
                                             <div className="flex items-center gap-2">
                                                 Voice Channels
@@ -461,13 +521,18 @@ export default function ChannelsLayout() {
                                             </div>
                                             <IconPlus onClick={() => setAddChannelUI(true)} stroke={2} size={15} />
                                         </div>
-                                        {channels.map((server, index) => {
-                                            return (
-                                                <>
-                                                    {server.serverId == selectedServerId && server.type == 'voice' && (<button key={index} onClick={() => setSelectedChannel('Voice Channel WIP')} className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer hover:text-white ${selectedChannel == '2' ? 'bg-[#2c2c30] text-white' : 'text-white/50'}`}><IconVolume stroke={2} size={20} /> {server.name}</button>)}
-                                                </>
-                                            )
-                                        })}
+                                        {channels
+                                            .filter(channel => channel.serverId === selectedServerId && channel.type === 'voice')
+                                            .map(channel => (
+                                                <button
+                                                    key={channel.id}
+                                                    onClick={() => setSelectedChannel('Voice Channel WIP')}
+                                                    className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer hover:text-white ${selectedChannel === channel.id ? 'bg-[#2c2c30] text-white' : 'text-white/50'
+                                                        }`}
+                                                >
+                                                    <IconVolume stroke={2} size={20} /> {channel.name}
+                                                </button>
+                                            ))}
                                     </div>
                                 </div>
                             </div>)}
@@ -521,7 +586,7 @@ export default function ChannelsLayout() {
 
                 {/* Right Side */}
                 <div className="h-full w-full bg-[#1a1a1e] border-t border-[#303034] flex flex-col">
-                    <MessagesPage selectedChannel={selectedChannel ?? ""} selectedChannelId={selectedChannelId ?? ""} user={user!}/>
+                    <MessagesPage selectedChannel={selectedChannel ?? ""} selectedChannelId={selectedChannelId ?? ""} user={user!} />
                 </div>
             </div>
         </div>

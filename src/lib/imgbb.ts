@@ -1,8 +1,14 @@
 // /lib/imgbb.ts
-export async function uploadToImgBB(file: File): Promise<string> {
+
+type ImgBBUploadResult = {
+    url: string;
+    deleteUrl: string;
+};
+
+export async function uploadToImgBB(file: File): Promise<ImgBBUploadResult> {
     const formData = new FormData();
     formData.append("image", file);
-    formData.append("key", process.env.NEXT_PUBLIC_IMGBB_API_KEY!); // Make this public for client-side
+    formData.append("key", process.env.NEXT_PUBLIC_IMGBB_API_KEY!);
 
     const res = await fetch("https://api.imgbb.com/1/upload", {
         method: "POST",
@@ -13,5 +19,8 @@ export async function uploadToImgBB(file: File): Promise<string> {
 
     if (!data.success) throw new Error("ImgBB upload failed");
 
-    return data.data.url; // public image URL
+    return {
+        url: data.data.url,
+        deleteUrl: data.data.delete_url,
+    };
 }
