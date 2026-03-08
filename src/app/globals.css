@@ -34,3 +34,12 @@ body {
   -ms-overflow-style: none; /* IE/Edge */
   scrollbar-width: none; /* Firefox */
 }
+
+.scrollbar-minimal::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-minimal::-webkit-scrollbar-thumb {
+  background: rgba(100,100,100,0.5);
+  border-radius: 9999px;
+}

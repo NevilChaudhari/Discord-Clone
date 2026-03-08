@@ -21,6 +21,14 @@ interface Channels {
     serverId: string;
 }
 
+interface user{
+    id: string;
+    email: string;
+    username: string;
+    refcode: string;
+    profile: string;
+}
+
 export default function ChannelsLayout() {
 
 
@@ -28,12 +36,14 @@ export default function ChannelsLayout() {
 
     const [session, setSession] = useState<any>(undefined);
     const [file, setFile] = useState<File | null>(null);
+    const [user, setUser] = useState<user | null>(null);
     const [profile, setProfile] = useState('https://i.ibb.co/7tKbDGFX/default-profile.jpg');
     const [username, setUsername] = useState('username');
     const [uid, setUid] = useState('');
     const [selectedServer, setSelectedServer] = useState<string | null>("me");
     const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
     const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
+    const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
     const [servers, setServers] = useState<Servers[]>([]);
     const [channels, setChannels] = useState<Channels[]>([]);
     const [mute, setMute] = useState(true);
@@ -99,6 +109,7 @@ export default function ChannelsLayout() {
             alert(JSON.stringify(error));
             return;
         }
+        setUser(data);
         setProfile(data?.profile);
         setUsername(data?.username);
     };
@@ -116,11 +127,15 @@ export default function ChannelsLayout() {
 
     const removeServer = async (id: string) => {
         try {
+            await supabase
+                .from("channels")
+                .delete()
+                .eq("serverId", id)
+
             const { data, error } = await supabase
                 .from("server")
                 .delete()
                 .eq("id", id)
-                .select(); // optional if you need deleted data
 
             if (error) {
                 console.error("Failed to delete server:", error.message);
@@ -435,7 +450,7 @@ export default function ChannelsLayout() {
                                         {channels.map((server, index) => {
                                             return (
                                                 <>
-                                                    {server.serverId == selectedServerId && server.type == 'text' && (<button key={index} onClick={() => { setSelectedChannel(server.name); }} className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer w-full hover:text-white ${selectedChannel == '1' ? 'bg-[#2c2c30] text-white' : 'text-white/50'}`}><IconHash stroke={2} size={20} /> {server.name}</button>)}
+                                                    {server.serverId == selectedServerId && server.type == 'text' && (<button key={index} onClick={() => { setSelectedChannel(server.name); setSelectedChannelId(server.id)}} className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer w-full hover:text-white ${selectedChannelId == server.id ? 'bg-[#2c2c30] text-white' : 'text-white/50'}`}><IconHash stroke={2} size={20} /> {server.name}</button>)}
                                                 </>
                                             )
                                         })}
@@ -449,7 +464,7 @@ export default function ChannelsLayout() {
                                         {channels.map((server, index) => {
                                             return (
                                                 <>
-                                                    {server.serverId == selectedServerId && server.type == 'voice' && (<button key={index} onClick={() => setSelectedChannel('2')} className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer hover:text-white ${selectedChannel == '2' ? 'bg-[#2c2c30] text-white' : 'text-white/50'}`}><IconVolume stroke={2} size={20} /> {server.name}</button>)}
+                                                    {server.serverId == selectedServerId && server.type == 'voice' && (<button key={index} onClick={() => setSelectedChannel('Voice Channel WIP')} className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer hover:text-white ${selectedChannel == '2' ? 'bg-[#2c2c30] text-white' : 'text-white/50'}`}><IconVolume stroke={2} size={20} /> {server.name}</button>)}
                                                 </>
                                             )
                                         })}
@@ -506,7 +521,7 @@ export default function ChannelsLayout() {
 
                 {/* Right Side */}
                 <div className="h-full w-full bg-[#1a1a1e] border-t border-[#303034] flex flex-col">
-                    <MessagesPage selectedChannel={selectedChannel ?? ""} />
+                    <MessagesPage selectedChannel={selectedChannel ?? ""} selectedChannelId={selectedChannelId ?? ""} user={user!}/>
                 </div>
             </div>
         </div>
