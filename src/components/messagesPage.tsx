@@ -115,10 +115,10 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user 
     };
 
     return (
-        <div className="flex flex-col flex-1 text-white pb-3 w-full h-full">
+        <div className="flex flex-col flex-1 text-white pb-2 w-full h-full">
 
             {/* header */}
-            <div className="h-10 flex items-center px-3 w-full border-b border-[#303034]">
+            <div className="h-10 flex items-center p-3 w-full border-b border-[#303034]">
                 <div className="flex gap-3">
                     <IconHash stroke={2} size={20} color="gray" />{selectedChannel}
                 </div>

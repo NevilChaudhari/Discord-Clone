@@ -52,10 +52,13 @@ export default function ChannelsLayout() {
     const [mute, setMute] = useState(true);
     const [deafen, setDeafen] = useState(false);
     const [addChannelUI, setAddChannelUI] = useState(false);
+    const [addServerMenu, setAddServerMenu] = useState(false);
     const [addServerUI, setAddServerUI] = useState(false);
+    const [joinServerUI, setJoinServerUI] = useState(false);
     const [channelType, setChannelType] = useState("text");
     const [channelName, setChannelName] = useState("");
     const [serverName, setServerName] = useState("");
+    const [serverCode, setServerCode] = useState("");
     const [preview, setPreview] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
@@ -124,14 +127,21 @@ export default function ChannelsLayout() {
         const nanoid = customAlphabet("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 6)
         const serverCode = nanoid()
         // alert(id);
-        const { data, error } = await supabase.from("server").insert({ id: id, name: name, icon: preview, serverCode: serverCode});
+        const { data, error } = await supabase.from("server").insert({ id: id, name: name, icon: preview, serverCode: serverCode });
         if (error) {
             return;
         }
-        getServers();
+        setServerCode(serverCode);
+        // getServers();
         setAddServerUI(false);
         setPreview(null);
         setServerName('');
+
+        const { data: channelData, error: channelError } = await supabase
+            .from("members")
+            .insert({ userId: user?.id, serverId: id, role: 'owner' });
+
+        await getJoinedServers();
     };
 
     const cancelServerCreation = async () => {
@@ -151,26 +161,65 @@ export default function ChannelsLayout() {
 
     const removeServer = async (id: string) => {
         try {
-            await supabase
-                .from("channels")
-                .delete()
-                .eq("serverId", id)
+            const { data: serverData, error: serverError } = await supabase
+                .from('members')
+                .select('role')
+                .eq('userId', user?.id)
+                .eq('serverId', id)
+                .single();
 
-            const { data, error } = await supabase
-                .from("server")
-                .delete()
-                .eq("id", id)
-
-            if (error) {
-                console.error("Failed to delete server:", error.message);
+            if (serverError) {
+                console.error(serverError);
                 return;
             }
 
-            console.log("Deleted server:", data);
+            const role = serverData?.role;
 
-            // Refresh server list or update state
-            getServers();
-            setSelectedServerId('me')
+            // If OWNER → delete everything
+            if (role === 'owner') {
+
+                await supabase
+                    .from("channels")
+                    .delete()
+                    .eq("serverId", id);
+
+                await supabase
+                    .from("members")
+                    .delete()
+                    .eq("serverId", id);
+
+                const { error } = await supabase
+                    .from("server")
+                    .delete()
+                    .eq("id", id);
+
+                if (error) {
+                    console.error("Failed to delete server:", error.message);
+                    return;
+                }
+
+                console.log("Server deleted");
+
+            } else {
+                // If MEMBER → just leave server
+                const { error } = await supabase
+                    .from("members")
+                    .delete()
+                    .eq("serverId", id)
+                    .eq("userId", user?.id);
+
+                if (error) {
+                    console.error("Failed to leave server:", error.message);
+                    return;
+                }
+
+                console.log("User left server");
+            }
+
+            // Refresh UI
+            getJoinedServers();
+            setSelectedServerId('me');
+
         } catch (err) {
             console.error("Unexpected error deleting server:", err);
         }
@@ -190,18 +239,18 @@ export default function ChannelsLayout() {
     };
 
     useEffect(() => {
-        getServers();
+        // getServers();
         getChannels();
     }, []);
 
-    const getServers = async () => {
-        const { data, error } = await supabase.from("server").select('*');
-        if (error) {
-            alert(JSON.stringify(error));
-            return;
-        }
-        setServers(data);
-    };
+    // const getServers = async () => {
+    //     const { data, error } = await supabase.from("server").select('*');
+    //     if (error) {
+    //         alert(JSON.stringify(error));
+    //         return;
+    //     }
+    //     setServers(data);
+    // };
 
     const getChannels = async () => {
         const { data, error } = await supabase.from("channels").select('*');
@@ -219,6 +268,81 @@ export default function ChannelsLayout() {
             fileInputRef.current.click();
         }
     };
+
+    const handleServerjoining = async () => {
+        const { data: serverData, error: serverError } = await supabase
+            .from("server")
+            .select("*")
+            .eq("serverCode", serverCode)
+            .single();
+
+        if (serverError) {
+            alert(JSON.stringify(serverError));
+            return;
+        }
+
+        const { data: channelData, error: channelError } = await supabase
+            .from("members")
+            .insert({ userId: user?.id, serverId: serverData.id });
+
+        if (channelError) {
+            alert(JSON.stringify(channelError));
+            return;
+        }
+
+        setServerCode('');
+        setJoinServerUI(false);
+        getJoinedServers()
+    };
+
+    const [joinedServerIds, setJoinedServerIds] = useState<number[]>([]);
+
+    useEffect(() => {
+        if (user?.id) {
+            getJoinedServers();
+        }
+    }, [user]);
+
+    const getJoinedServers = async () => {
+        if (!user?.id) {
+            console.warn("No user ID available yet");
+            return;
+        }
+
+        const { data: serverData, error: serverError } = await supabase
+            .from("members")
+            .select("serverId")
+            .eq("userId", user.id); // safe now
+
+        if (serverError) {
+            console.error("Error fetching server IDs:", serverError);
+            return;
+        }
+
+        const serverIds = serverData.map(item => item.serverId);
+        setJoinedServerIds(serverIds);
+
+        if (serverIds.length === 0) {
+            console.log("User is not part of any servers");
+            return;
+        }
+
+        const { data: serverDetails, error } = await supabase
+            .from("server")
+            .select("*")
+            .in("id", serverIds);
+
+        if (error) {
+            console.error("Error fetching server details:", error);
+            return;
+        }
+
+        setServers(serverDetails);
+        setServerCode('');
+        setJoinServerUI(false);
+    };
+
+
     return (
         <div className="bg-[#121214] w-screen h-dvh overflow-hidden flex flex-col relative">
 
@@ -240,8 +364,7 @@ export default function ChannelsLayout() {
                                     ref={fileInputRef}
                                     className="hidden"
                                     accept="image/*"
-                                    onChange={handleFileChange}
-                                />
+                                    onChange={handleFileChange} />
                                 <div
                                     onClick={openFilePicker}
                                     className="w-full h-full rounded-full border-2 border-dashed border-gray-500 flex items-center justify-center text-gray-300 cursor-pointer relative overflow-hidden"
@@ -256,15 +379,13 @@ export default function ChannelsLayout() {
                                                         width="130"
                                                         color="#615fff"
                                                         ariaLabel="tail-spin-loading"
-                                                        radius="1"
-                                                    />
+                                                        radius="1" />
                                                 </div>
                                             )}
                                             <img
                                                 src={preview}
                                                 className={`absolute w-full h-full rounded-md object-cover ${loading ? 'opacity-0' : 'opacity-100'}`}
-                                                alt="Server Icon"
-                                            />
+                                                alt="Server Icon" />
                                         </>
                                     ) : (
                                         <button className="w-full h-full rounded-md flex items-center justify-center cursor-pointer">
@@ -290,8 +411,53 @@ export default function ChannelsLayout() {
                             </div>
                         </div>
                         <div className="flex gap-2">
-                            <button onClick={() => { cancelServerCreation() }} className="w-full rounded-md h-10 cursor-pointer text-white bg-white/5">Cancel</button>
+                            <button onClick={() => { cancelServerCreation(); }} className="w-full rounded-md h-10 cursor-pointer text-white bg-white/5">Cancel</button>
                             <button onClick={() => addServer(serverName)} disabled={!serverName} className={`w-full rounded-md h-10 cursor-pointer ${serverName == '' ? 'bg-[#5865f2]/50 text-white/50' : 'bg-[#5865f2] text-white'}`}>Create Server</button>
+                        </div>
+                    </div>
+                </div>
+            </div>)}
+
+            {/* Join Server UI */}
+            {joinServerUI && (<div className="absolute w-full h-full">
+                <div className="relative flex items-center justify-center w-full h-full bg-black/50">
+                    <div className="absolute w-120 h-auto bg-[#242429] rounded-xl p-5 flex flex-col gap-10">
+                        <div className="flex flex-col">
+                            <div className="flex items-center justify-center">
+                                <span className="text-xl font-semibold">Join a Server</span>
+                                <IconX onClick={() => setAddServerUI(false)} stroke={2} size={20} className="cursor-pointer absolute right-5 top-5" />
+                            </div>
+                            <span className="text-sm text-white/50 text-center px-10">Enter an invite code below to join an existing server</span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <span>Server Code</span>
+                            <div className="flex items-center px-3 gap-2 bg-[#202024] w-full h-12 rounded-md border border-[#303034]">
+                                <input type="text" value={serverCode} onChange={(e) => setServerCode(e.target.value)} placeholder="XXXXXX" className="h-full w-full focus:outline-0" />
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => { setJoinServerUI(false) }} className="w-full rounded-md h-10 cursor-pointer text-white bg-white/5">Cancel</button>
+                            <button onClick={() => { handleServerjoining() }} className={`w-full rounded-md h-10 cursor-pointer ${serverCode == '' ? 'bg-[#5865f2]/50 text-white/50' : 'bg-[#5865f2] text-white'}`}>Join Server</button>
+                        </div>
+                    </div>
+                </div>
+            </div>)}
+
+            {/* Server Join/Add Menu */}
+            {addServerMenu && (<div className="absolute w-full h-full">
+                <div className="relative flex items-center justify-center w-full h-full bg-black/50">
+                    <div className="absolute w-120 h-auto bg-[#242429] rounded-xl p-5 flex flex-col gap-10">
+                        {/* Join a server */}
+                        <div className="flex flex-col">
+                            <div className="flex items-center justify-center">
+                                <span className="text-xl font-semibold">Create or Join a Server</span>
+                                <IconX onClick={() => setAddServerMenu(false)} stroke={2} size={20} className="cursor-pointer absolute right-5 top-5" />
+                            </div>
+                            <span className="text-sm text-white/50 text-center px-10">Your server is where you and your friends hang out. Make yours and start talking.</span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <button onClick={() => { setJoinServerUI(false); setAddServerUI(true); setAddServerMenu(false) }} className="w-full rounded-md h-10 cursor-pointer text-white bg-white/10 hover:bg-white/5">Create My Own Server</button>
+                            <button onClick={() => { setJoinServerUI(true); setAddServerUI(false); setAddServerMenu(false) }} className='w-full rounded-md h-10 cursor-pointer bg-[#5865f2] hover:bg-[#5865f2]/70 text-white'>Join A Server</button>
                         </div>
                     </div>
                 </div>
@@ -376,6 +542,7 @@ export default function ChannelsLayout() {
                 <IconUserFilled color="gray" size={20} />
                 <span className="text-sm">{selectedServer}</span>
             </div>
+            {/* Body */}
             <div className="flex flex-1 overflow-hidden">
                 {/* Left Side */}
                 <div className="w-85 h-full flex flex-col">
@@ -415,7 +582,7 @@ export default function ChannelsLayout() {
                             })}
 
                             {/* Add Servver */}
-                            <div onClick={() => setAddServerUI(true)} className="flex">
+                            <div onClick={() => setAddServerMenu(true)} className="flex">
                                 <div className="flex gap-2 items-center justify-center group">
                                     <div className="h-2 w-1"></div>
                                     <div className="w-10 h-10 rounded-xl cursor-pointer flex items-center justify-center bg-white/10 hover:bg-[#5865f2]">
