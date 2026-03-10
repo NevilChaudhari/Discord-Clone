@@ -16,6 +16,7 @@ interface Servers {
     id: string;
     name: string;
     icon: string;
+    serverCode: string;
 }
 interface Channels {
     id: string;
@@ -37,13 +38,20 @@ export default function ChannelsLayout() {
 
     const router = useRouter();
 
+    const defaultServer = {
+        id: 'Me',
+        name: 'Me',
+        icon: 'Me',
+        serverCode: 'Me'
+    }
+
     const [session, setSession] = useState<any>(undefined);
     const [file, setFile] = useState<File | null>(null);
     const [user, setUser] = useState<user | null>(null);
     const [profile, setProfile] = useState('https://i.ibb.co/7tKbDGFX/default-profile.jpg');
     const [username, setUsername] = useState('username');
     const [uid, setUid] = useState('');
-    const [selectedServer, setSelectedServer] = useState<string | null>("me");
+    const [selectedServer, setSelectedServer] = useState<Servers>(defaultServer);
     const [selectedServerId, setSelectedServerId] = useState<string | null>('me');
     const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
     const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
@@ -178,20 +186,11 @@ export default function ChannelsLayout() {
             // If OWNER → delete everything
             if (role === 'owner') {
 
-                await supabase
-                    .from("channels")
-                    .delete()
-                    .eq("serverId", id);
+                await supabase.from("channels").delete().eq("serverId", id);
 
-                await supabase
-                    .from("members")
-                    .delete()
-                    .eq("serverId", id);
+                await supabase.from("members").delete().eq("serverId", id);
 
-                const { error } = await supabase
-                    .from("server")
-                    .delete()
-                    .eq("id", id);
+                const { error } = await supabase.from("server").delete().eq("id", id);
 
                 if (error) {
                     console.error("Failed to delete server:", error.message);
@@ -199,7 +198,8 @@ export default function ChannelsLayout() {
                 }
 
                 console.log("Server deleted");
-
+                setServers(prev => prev.filter(server => server.id !== id));
+                setJoinedServerIds(prev => prev.filter(serverId => serverId !== id));
             } else {
                 // If MEMBER → just leave server
                 const { error } = await supabase
@@ -212,6 +212,8 @@ export default function ChannelsLayout() {
                     console.error("Failed to leave server:", error.message);
                     return;
                 }
+                setJoinedServerIds(prev => prev.filter(serverId => serverId !== id));
+                setServers(prev => prev.filter(server => server.id !== id));
 
                 console.log("User left server");
             }
@@ -219,6 +221,7 @@ export default function ChannelsLayout() {
             // Refresh UI
             getJoinedServers();
             setSelectedServerId('me');
+            setSelectedServer(defaultServer);
 
         } catch (err) {
             console.error("Unexpected error deleting server:", err);
@@ -295,7 +298,7 @@ export default function ChannelsLayout() {
         getJoinedServers()
     };
 
-    const [joinedServerIds, setJoinedServerIds] = useState<number[]>([]);
+    const [joinedServerIds, setJoinedServerIds] = useState<string[]>([]);
 
     useEffect(() => {
         if (user?.id) {
@@ -342,6 +345,15 @@ export default function ChannelsLayout() {
         setJoinServerUI(false);
     };
 
+
+    const copyText = async (text: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            alert("Copied!");
+        } catch (err) {
+            console.error("Copy failed", err);
+        }
+    };
 
     return (
         <div className="bg-[#121214] w-screen h-dvh overflow-hidden flex flex-col relative">
@@ -472,7 +484,7 @@ export default function ChannelsLayout() {
                                 <span className="text-xl font-semibold">Create Channel</span>
                                 <IconX onClick={() => setAddChannelUI(false)} stroke={2} size={20} className="cursor-pointer" />
                             </div>
-                            <span className="text-sm text-white/40">in {selectedServer}</span>
+                            <span className="text-sm text-white/40">in {selectedServer?.name}</span>
                         </div>
                         <div className="flex flex-col">
                             <span>Channel Type</span>
@@ -534,13 +546,23 @@ export default function ChannelsLayout() {
 
 
             {/* Header */}
-            <div className="relative min-h-10 w-full flex items-center justify-center">
+            <div className="relative min-h-10 w-full flex items-center gap-3 justify-center">
                 <div className="absolute flex gap-5 w-auto right-0 px-2">
                     <IconInbox stroke={2} className="hover:text-white text-[#808080] cursor-pointer" />
                     <IconHelpFilled className="hover:text-white text-[#808080] cursor-pointer" />
                 </div>
-                <IconUserFilled color="gray" size={20} />
-                <span className="text-sm">{selectedServer}</span>
+                {selectedServer.id == 'Me' && (<IconUserFilled color="gray" size={20} />)}
+                {selectedServer.icon && selectedServer.id != 'Me' && (<div className="flex w-7 h-7 overflow-hidden rounded-md mx-2">
+                    <img src={selectedServer?.icon} alt="" className="w-full h-full" />
+                </div>)}
+                {!selectedServer.icon && selectedServer.id != 'Me' && (<div className="w-8 h-8 overflow-hidden rounded-md bg-white/5 flex justify-center items-center font-semibold">
+                    {selectedServer.name
+                        .split(' ')
+                        .slice(0, 3)
+                        .map(word => word[0]?.toUpperCase())
+                        .join('')}
+                </div>)}
+                <span className="text-sm">{selectedServer?.name}</span>
             </div>
             {/* Body */}
             <div className="flex flex-1 overflow-hidden">
@@ -551,7 +573,9 @@ export default function ChannelsLayout() {
                         <div className="w-15 flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto overflow-x-hidden hide-scrollbar">
 
                             {/* Direct Message Tab */}
-                            <div onClick={() => setSelectedServerId("me")} className="flex">
+                            <div onClick={() => {
+                                setSelectedServerId("me"); setSelectedServer({ id: 'Me', name: 'Me', icon: 'Me', serverCode: 'Me' })
+                            }} className="flex">
                                 <div className="flex gap-2 items-center justify-center group">
                                     <div className={`bg-white ${selectedServerId == 'me' ? 'h-full' : 'h-2 group-hover:h-5'} w-1 rounded-r-md`}></div>
                                     <div className={`w-10 h-10 flex items-center justify-center rounded-xl ${selectedServerId == 'me' ? 'bg-[#5865f2]' : 'bg-white/10'} hover:bg-[#5865f2] cursor-pointer`}>
@@ -564,7 +588,7 @@ export default function ChannelsLayout() {
 
                             {servers.map((server) => {
                                 return (
-                                    <div key={server.id} onDoubleClick={() => removeServer(server.id)} onClick={() => { setSelectedServer(server.name); setSelectedServerId(server.id) }} className="flex">
+                                    <div key={server.id} onDoubleClick={() => removeServer(server.id)} onClick={() => { setSelectedServer(server); setSelectedChannel(null);  setSelectedChannelId(null); setSelectedServerId(server.id) }} className="flex">
                                         <div className="flex gap-2 items-center justify-center group">
                                             <div className={`bg-white ${selectedServerId == server.id ? 'h-full' : 'h-2 group-hover:h-5'} w-1 rounded-r-md`}></div>
                                             <div className="w-10 h-10 overflow-hidden rounded-xl cursor-pointer bg-white/5 flex justify-center items-center font-semibold">
@@ -650,7 +674,7 @@ export default function ChannelsLayout() {
                             {selectedServerId != 'me' && (<div className="flex flex-col">
                                 {/* Header */}
                                 <div className="h-10 w-full border-b flex gap-2 border-[#303034] px-2 py-1">
-                                    <span className="hover:bg-white/10 cursor-pointer flex items-center justify-center rounded-md w-full h-full font-semibold text-sm">{selectedServer}</span>
+                                    <span onClick={() => copyText(selectedServer.serverCode)} className="hover:bg-white/10 cursor-pointer flex items-center justify-center rounded-md w-full h-full font-semibold text-sm">{selectedServer?.name}</span>
                                     <div className="flex items-center justify-center cursor-pointer hover:bg-white/10 p-1 rounded-md">
                                         <IconUserPlus stroke={2} size={20} />
                                     </div>
@@ -753,7 +777,7 @@ export default function ChannelsLayout() {
 
                 {/* Right Side */}
                 <div className="h-full w-full bg-[#1a1a1e] border-t border-[#303034] flex flex-col">
-                    <MessagesPage selectedChannel={selectedChannel ?? ""} selectedChannelId={selectedChannelId ?? ""} user={user!} />
+                    <MessagesPage selectedChannel={selectedChannel ?? ""} selectedChannelId={selectedChannelId ?? ""} user={user!} selectedServer={selectedServer} />
                 </div>
             </div>
         </div>

@@ -1,9 +1,8 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
-import { IconGif, IconGift, IconHash, IconMoodHappy, IconPlus, IconSticker2 } from "@tabler/icons-react";
+import { IconBellFilled, IconGif, IconGift, IconHash, IconMoodHappy, IconPinFilled, IconPlus, IconSticker2, IconUser, IconUserFilled } from "@tabler/icons-react";
 import { format } from "date-fns";
-import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 interface user {
@@ -20,18 +19,26 @@ interface Messages {
     destination: string;
     created_at: string;
 }
+interface Server {
+    id: string;
+    name: string;
+    icon: string;
+}
 
 type UserCardProps = {
     selectedChannel: string;
     selectedChannelId: string;
     user?: user;
+    selectedServer: Server;
 };
 
-export default function MessagesPage({ selectedChannel, selectedChannelId, user }: UserCardProps) {
-    const { serverId } = useParams();
+export default function MessagesPage({ selectedChannel, selectedChannelId, user, selectedServer }: UserCardProps) {
     const [message, setMessage] = useState('')
     const [messages, setMessages] = useState<Messages[]>([]);
-    const [users, setUsers] = useState<user[]>([])
+    const [users, setUsers] = useState<user[]>([]);
+    const [showUsers, setShowUsers] = useState(false);
+    const [serverUsers, setServerUsers] = useState<user[]>([]);
+
     useEffect(() => {
         getMessage();
     }, [selectedChannelId])
@@ -114,67 +121,117 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user 
         setUsers(data || []);
     };
 
-    return (
-        <div className="flex flex-col flex-1 text-white pb-2 w-full h-full">
+    useEffect(() => { getServerUsers() }, [selectedServer])
 
+    const getServerUsers = async () => {
+        if (selectedServer.id == 'Me') {
+            return;
+        }
+        const { data: members, error } = await supabase.from('members').select('userId').eq('serverId', selectedServer.id)
+        if (error) {
+            alert("server user says: " + error.message);
+        }
+
+        const userIds = members?.map(m => m.userId) || [];
+
+        const { data: userData, error: userError } = await supabase.from('users').select('*').in('id', userIds)
+        if (userError) {
+            alert("server user's data says:" + userError.message);
+        }
+        setServerUsers(userData || []);
+
+        // alert(JSON.stringify(userData))
+    }
+
+    return (
+        <div className="flex flex-1 flex-col text-white pb-2 w-full h-full">
             {/* header */}
-            <div className="h-10 flex items-center p-3 w-full border-b border-[#303034]">
+            <div className="h-10 flex items-center p-3 w-full border-b border-[#303034] place-content-between">
                 <div className="flex gap-3">
                     <IconHash stroke={2} size={20} color="gray" />{selectedChannel}
                 </div>
+
+                {selectedServer.id != 'Me' && (<div className="flex gap-5">
+                    <IconBellFilled size={20} className="text-white/50 hover:text-white cursor-pointer" />
+                    <IconPinFilled size={20} className="text-white/50 hover:text-white cursor-pointer" />
+                    <IconUserFilled size={20} className="text-white/50 hover:text-white cursor-pointer" onClick={() => { getServerUsers(); setShowUsers(!showUsers) }} />
+                </div>)}
             </div>
+            {/* Main Chat Area */}
+            <div className="flex w-full h-full">
 
-            {/* Messages Area */}
-            <div ref={bottomRef} className="w-full h-full p-2 flex flex-col justify-end gap-5 overflow-y-auto scrollbar-minimal">
+                {/* Left Side */}
+                {selectedChannel && (<div className="flex flex-col w-full h-full">
+                    {/* Messages Area */}
+                    <div ref={bottomRef} className="w-full h-full p-2 flex flex-col justify-end gap-5 overflow-y-auto scrollbar-minimal">
 
-                {messages.map((message) => {
-                    const user = users.find(u => u.id === message.sender);
+                        {messages.map((message) => {
+                            const user = users.find(u => u.id === message.sender);
 
-                    return (
-                        <div key={message.id} className="flex gap-3">
-                            <div className="w-10 h-10 rounded-full overflow-hidden">
-                                <img src={user?.profile} className="h-full w-full object-cover" />
-                            </div>
+                            return (
+                                <div key={message.id} className="flex gap-3">
+                                    <div className="w-10 h-10 rounded-full overflow-hidden">
+                                        <img src={user?.profile} className="h-full w-full object-cover" />
+                                    </div>
 
-                            <div className="flex flex-col">
-                                <div className="flex gap-3">
-                                    <span className="text-sm font-semibold">{user?.username}</span>
-                                    <span className="text-xs text-white/50">{format(new Date(message.created_at), "hh:mm a")}</span>
+                                    <div className="flex flex-col">
+                                        <div className="flex gap-3">
+                                            <span className="text-sm font-semibold">{user?.username}</span>
+                                            <span className="text-xs text-white/50">{format(new Date(message.created_at), "hh:mm a")}</span>
+                                        </div>
+                                        {message.message}
+                                    </div>
                                 </div>
-                                {message.message}
+                            );
+                        })}
+
+                    </div>
+
+                    <div className="px-3 w-full h-15 items-center">
+                        <div className="flex px-3 gap-5 items-center rounded-md border border-[#303034] bg-[#222327] w-full h-full">
+                            {/* add Files */}
+                            <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer hover:bg-white/20 p-1 rounded-md">
+                                <IconPlus stroke={2} />
+                            </div>
+                            {/* Message Input */}
+                            <form onSubmit={handleSendMessage} className="w-full h-full">
+                                <input type="text" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={`Message #${selectedChannel}`} className="w-full h-full focus:outline-0 font-thin text-white/60" />
+                            </form>
+                            {/* Extra Options */}
+                            <div className="flex gap-2">
+                                <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
+                                    <IconGift stroke={2} />
+                                </div>
+                                <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
+                                    <IconGif stroke={2} />
+                                </div>
+                                <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
+                                    <IconSticker2 stroke={2} />
+                                </div>
+                                <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
+                                    <IconMoodHappy stroke={2} />
+                                </div>
                             </div>
                         </div>
-                    );
-                })}
-
-            </div>
-
-            <div className="px-3 w-full h-15 items-center">
-                <div className="flex px-3 gap-5 items-center rounded-md border border-[#303034] bg-[#222327] w-full h-full">
-                    {/* add Files */}
-                    <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer hover:bg-white/20 p-1 rounded-md">
-                        <IconPlus stroke={2} />
                     </div>
-                    {/* Message Input */}
-                    <form onSubmit={handleSendMessage} className="w-full h-full">
-                        <input type="text" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={`Message #${selectedChannel}`} className="w-full h-full focus:outline-0 font-thin text-white/60" />
-                    </form>
-                    {/* Extra Options */}
-                    <div className="flex gap-2">
-                        <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
-                            <IconGift stroke={2} />
-                        </div>
-                        <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
-                            <IconGif stroke={2} />
-                        </div>
-                        <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
-                            <IconSticker2 stroke={2} />
-                        </div>
-                        <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
-                            <IconMoodHappy stroke={2} />
-                        </div>
-                    </div>
-                </div>
+                </div>)}
+
+                {/* Show Users */}
+                {showUsers && selectedServer.id != 'Me' && (<div className="flex flex-col gap-3 h-full w-[20vw] min-w-60 border-l border-[#303034] px-3 py-5">
+                    {/* users template */}
+                    <span className="text-white/50">Server users:</span>
+
+                    {serverUsers.map((su) => {
+                        return (
+                            <div key={su.id} className="flex items-center gap-3 group hover:bg-white/5 px-2 py-1 rounded-md cursor-pointer">
+                                <div className="w-9 h-9 overflow-hidden rounded-full">
+                                    <img src={su.profile} alt="" className="w-full h-full object-cover" />
+                                </div>
+                                <span className="text-white/50 group-hover:text-white">{su.username}</span>
+                            </div>
+                        )
+                    })}
+                </div>)}
             </div>
         </div>
     );
