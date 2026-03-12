@@ -36,7 +36,7 @@ export async function signIn(email: string, password: string) {
     });
 
     if (error) {
-        return {error};
+        return { error };
         // throw new Error(error.message);
     }
 }
@@ -53,6 +53,17 @@ export async function signOut() {
 // Get current logged in user
 export async function getCurrentUser() {
     const { data, error } = await supabase.auth.getUser();
+
+    if (error) {
+        throw new Error(error.message);
+    }
+
+    return data.user;
+}
+
+// Delete user
+export async function deleteUser(userId: string) {
+    const { data, error } = await supabase.auth.admin.deleteUser(userId);
 
     if (error) {
         throw new Error(error.message);
