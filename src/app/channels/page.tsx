@@ -33,8 +33,13 @@ interface user {
     profile: string;
 }
 
-interface Friend {
-    friend: user;
+interface friend {
+    id: string;
+    email: string;
+    username: string;
+    refcode: string;
+    profile: string;
+    chatId: string;
 }
 
 export default function ChannelsLayout() {
@@ -73,8 +78,8 @@ export default function ChannelsLayout() {
     const [serverCode, setServerCode] = useState("");
     const [preview, setPreview] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const [friends, setFriends] = useState<Friend[]>([]);
-
+    const [friends, setFriends] = useState<friend[]>([]);
+    const [selectedFriend, setSelectedFriend] = useState<friend | null>(null);
 
 
     useEffect(() => {
@@ -380,23 +385,37 @@ export default function ChannelsLayout() {
     useEffect(() => { handlePendingRequest() }, [user]);
 
     const handlePendingRequest = async () => {
-        if (!user?.id) {
-            return;
-        }
-        const { data } = await supabase
+        console.log("USER:", user);
+
+        if (!user?.id) return;
+
+        const { data, error } = await supabase
             .from("friends")
             .select(`
-                    friend:users!friends_friendId_fkey (
-                        id,
-                        email,
-                        username,
-                        refcode,
-                        profile
-                        )
-                    `)
-            .or(`userId.eq.${user.id},friendId.eq.${user.id}`).eq('status', 'accepted') as { data: Friend[] | null };
-        setFriends(data ?? []);
-    }
+            userId,
+            friendId,
+            user:users!friends_userId_fkey (*),
+            friend:users!friends_friendId_fkey (*)
+        `)
+            .or(`userId.eq.${user.id},friendId.eq.${user.id}`)
+            .eq("status", "accepted");
+
+        console.log("DATA:", data);
+        console.log("ERROR:", error);
+
+        if (error) return;
+
+        const formatted = data
+            ?.map((row) => {
+                const other =
+                    row.userId === user.id ? row.friend : row.user;
+
+                return Array.isArray(other) ? other[0] : other;
+            })
+            .filter(Boolean);
+
+        setFriends(formatted ?? []);
+    };
 
     return (
         <div className="bg-[#121214] w-screen h-dvh overflow-hidden flex flex-col relative">
@@ -589,7 +608,7 @@ export default function ChannelsLayout() {
 
 
             {/* Header */}
-            <div className="relative min-h-10 w-full flex items-center gap-3 justify-center">
+            <div className="relative min-h-8 w-full flex items-center gap-3 justify-center">
                 <div className="absolute flex gap-5 w-auto right-0 px-2">
                     <IconInbox stroke={2} className="hover:text-white text-[#808080] cursor-pointer" />
                     <IconHelpFilled className="hover:text-white text-[#808080] cursor-pointer" />
@@ -617,7 +636,7 @@ export default function ChannelsLayout() {
 
                             {/* Direct Message Tab */}
                             <div onClick={() => {
-                                setSelectedServerId("me"); setSelectedServer(defaultServer);
+                                setSelectedServerId("me"); setSelectedServer(defaultServer); setSelectedChannel(null); setSelectedChannelId(null);
                             }} className="flex">
                                 <div className="flex gap-2 items-center justify-center group">
                                     <div className={`bg-white ${selectedServer.id == 'Me' ? 'h-full' : 'h-2 group-hover:h-5'} w-1 rounded-r-md`}></div>
@@ -683,14 +702,14 @@ export default function ChannelsLayout() {
                         <div className="w-70 h-full border-t border-l rounded-tl-xl border-[#303034] bg-[#121214]">
                             {selectedServer.id == 'Me' && (<div className="flex flex-col">
                                 {/* Header */}
-                                <div className="h-10 w-full border-b border-[#303034] px-2 py-1">
+                                <div className="h-12 w-full border-b border-[#303034] px-3 py-2">
                                     <button className="bg-white/5 hover:bg-white/10 cursor-pointer rounded-md w-full h-full text-sm">Find or start a conversation</button>
                                 </div>
 
                                 {/* Body(Friends) */}
                                 <div className="w-full h-full flex flex-col p-3">
                                     <div className="w-full h-auto flex flex-col border-b border-[#303034]">
-                                        <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconUserFilled /> Friends</button>
+                                        <button onClick={() => { setSelectedFriend(null) }} className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconUserFilled /> Friends</button>
                                         <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconDiamondFilled /> Nitro</button>
                                         <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconBasketFilled /> Shop</button>
                                         <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconZoomQuestionFilled /> Quest</button>
@@ -704,16 +723,16 @@ export default function ChannelsLayout() {
                                         </div>
 
                                         {/* Friends Template */}
-                                        {friends.map(({ friend }) => {
+                                        {friends.map((user) => {
                                             return (
-                                                <div key={friend.id} className="flex items-center p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white place-content-between">
+                                                <div onClick={() => { setSelectedFriend(user) }} key={user.id} className={`group flex items-center p-2 rounded-md cursor-pointer place-content-between ${selectedFriend?.id == user.id ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-white/50 hover:text-white'}`}>
                                                     <div className="flex gap-3 items-center">
                                                         <div className="rounded-full overflow-hidden w-8 h-8">
-                                                            <img src={friend.profile} alt="" className="w-full h-full object-center"/>
+                                                            <img src={user.profile} alt="" className="w-full h-full object-center" />
                                                         </div>
-                                                        {friend.username}
+                                                        {user.username}
                                                     </div>
-                                                    <div className="rounded-full hover:bg-black/50 flex items-center justify-center w-5 h-5 hover:text-red-500 cursor-pointer">
+                                                    <div className="group-hover:flex rounded-full hover:bg-black/50 hidden items-center justify-center w-5 h-5 hover:text-red-500 cursor-pointer">
                                                         <IconX stroke={2} size={15} />
                                                     </div>
                                                 </div>
@@ -724,7 +743,7 @@ export default function ChannelsLayout() {
                             </div>)}
                             {selectedServerId != 'me' && (<div className="flex flex-col">
                                 {/* Header */}
-                                <div className="h-10 w-full border-b flex gap-2 border-[#303034] px-2 py-1">
+                                <div className="h-12 w-full border-b flex gap-2 border-[#303034] px-2 py-1">
                                     <span onClick={() => copyText(selectedServer.serverCode)} className="hover:bg-white/10 cursor-pointer flex items-center justify-center rounded-md w-full h-full font-semibold text-sm">{selectedServer?.name}</span>
                                     <div className="flex items-center justify-center cursor-pointer hover:bg-white/10 p-1 rounded-md">
                                         <IconUserPlus stroke={2} size={20} />
@@ -830,7 +849,7 @@ export default function ChannelsLayout() {
 
                 {/* Right Side */}
                 <div className="h-full w-full bg-[#1a1a1e] border-t border-[#303034] flex flex-col">
-                    <MessagesPage selectedChannel={selectedChannel ?? ""} selectedChannelId={selectedChannelId ?? ""} user={user!} selectedServer={selectedServer} />
+                    <MessagesPage selectedChannel={selectedChannel ?? ""} selectedChannelId={selectedChannelId ?? ""} user={user!} selectedServer={selectedServer} selectedFriend={selectedFriend!} />
                 </div>
             </div>
         </div>
