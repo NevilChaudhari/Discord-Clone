@@ -11,6 +11,8 @@ interface user {
     username: string;
     refcode: string;
     profile: string;
+    banner: string;
+    bio: string;
     created_at: string;
 }
 
@@ -53,7 +55,7 @@ export default function MyAccount({ user, edit }: Props) {
             {/* Profile Card */}
             <div className="flex flex-col items-start relative bg-[#121214] w-full min-h-120 rounded-xl overflow-hidden">
                 {/* Banner */}
-                <div className="w-full min-h-[20%] bg-purple-300"></div>
+                <div className="w-full min-h-[20%]" style={{ backgroundColor: user?.banner }}></div>
                 {/* Profile */}
                 <div className="flex flex-col w-full h-full px-5 pb-5">
                     <div className="flex w-full">

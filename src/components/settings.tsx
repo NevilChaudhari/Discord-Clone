@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { MouseEventHandler, useState } from "react";
 import WIP from "./wip";
 import MyAccount from "./Settings/MyAccount";
+import Profile from "./Settings/Profile";
 
 interface user {
     id: string;
@@ -13,12 +14,15 @@ interface user {
     username: string;
     refcode: string;
     profile: string;
+    banner: string;
+    bio: string;
     created_at: string;
 }
 
 interface SettingsUiProps {
     user?: user;
     close: MouseEventHandler<HTMLDivElement>;
+    save?: () => void;
 };
 
 const settingsSections = [
@@ -58,7 +62,7 @@ const settingsSections = [
     },
 ];
 
-export default function SettingsUi({ user, close }: SettingsUiProps) {
+export default function SettingsUi({ user, close, save }: SettingsUiProps) {
     const router = useRouter();
 
     const [search, setSearch] = useState('');
@@ -151,12 +155,13 @@ export default function SettingsUi({ user, close }: SettingsUiProps) {
                 </div>
                 {/* Right Area */}
                 <div className="flex flex-col bg-[#202024] h-full w-full">
-                    <div className="flex w-full h-12 items-center border-b border-[#303034] px-5 place-content-between">
+                    <div className="flex w-full min-h-12 items-center border-b border-[#303034] px-5 place-content-between">
                         <label>{openedTab}</label>
                         <div onClick={close} className="flex items-center justify-center w-7 h-7 cursor-pointer hover:bg-[#323237] rounded-md"><IconXFilled size={20} /></div>
                     </div>
 
                     {openedTab === 'My Account' && (<MyAccount user={user} edit={() => setOpenedTab('Profile')} />)}
+                    {openedTab === 'Profile' && (<Profile user={user} edit={() => setOpenedTab('Profile')} save={save}/>)}
                 </div>
             </div>
         </div>

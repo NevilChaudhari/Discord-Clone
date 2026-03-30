@@ -12,6 +12,8 @@ interface user {
     username: string;
     refcode: string;
     profile: string;
+    banner: string;
+    bio: string;
 }
 
 interface friend {

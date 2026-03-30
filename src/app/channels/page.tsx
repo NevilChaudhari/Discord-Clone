@@ -32,6 +32,8 @@ interface user {
     username: string;
     refcode: string;
     profile: string;
+    banner: string;
+    bio: string;
     created_at: string;
 }
 
@@ -598,7 +600,7 @@ export default function ChannelsLayout() {
                 </div>
             </div>)}
 
-            {settingsUI && (<div className="absolute w-full h-full z-1 flex items-center justify-center"><SettingsUi user={user!} close={() => setSettingsUI(false)} /></div>)}
+            {settingsUI && (<div className="absolute w-full h-full z-1 flex items-center justify-center"><SettingsUi user={user!} close={() => setSettingsUI(false)} save={() => { getProfile(uid) }} /></div>)}
 
             {/* Header */}
             <div className="relative min-h-8 w-full flex items-center gap-3 justify-center">
@@ -839,7 +841,7 @@ export default function ChannelsLayout() {
                                     </div>
                                 </div>
 
-                                <div onClick={() => setSettingsUI(!settingsUI)} className="hover:bg-white/10 rounded-md p-1 cursor-pointer">
+                                <div onClick={() => { setSettingsUI(!settingsUI); getProfile(uid); }} className="hover:bg-white/10 rounded-md p-1 cursor-pointer">
                                     <IconSettingsFilled size={20} />
                                 </div>
                             </div>
