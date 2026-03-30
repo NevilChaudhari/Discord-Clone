@@ -2,15 +2,16 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { IconInbox, IconHelpFilled, IconUserFilled, IconBasketFilled, IconBrandSafari, IconChevronDown, IconDiamondFilled, IconDownload, IconHeadphonesFilled, IconHeadphonesOff, IconMicrophone, IconMicrophoneOff, IconPlus, IconSettingsFilled, IconX, IconZoomQuestionFilled, IconHash, IconUserPlus, IconVolume } from "@tabler/icons-react";
+import { IconInbox, IconHelpFilled, IconUserFilled, IconBasketFilled, IconBrandSafari, IconChevronDown, IconDiamondFilled, IconDownload, IconHeadphonesFilled, IconHeadphonesOff, IconMicrophone, IconMicrophoneOff, IconPlus, IconSettingsFilled, IconX, IconZoomQuestionFilled, IconHash, IconUserPlus, IconVolume, IconIdFilled, IconMeteorFilled } from "@tabler/icons-react";
 import { profile } from "console";
-import { deleteUser, signOut } from "@/services/auth";
+import { deleteUser } from "@/services/auth";
 import { supabase } from "@/lib/supabase";
 import { uploadToImgBB } from "@/lib/imgbb";
 import MessagesPage from '@/components/messagesPage';
 import { v4 as uuidv4 } from 'uuid';
 import { Oval, TailSpin } from "react-loader-spinner";
 import { customAlphabet } from "nanoid";
+import SettingsUi from "@/components/settings";
 
 interface Servers {
     id: string;
@@ -31,6 +32,7 @@ interface user {
     username: string;
     refcode: string;
     profile: string;
+    created_at: string;
 }
 
 interface friend {
@@ -80,6 +82,8 @@ export default function ChannelsLayout() {
     const [loading, setLoading] = useState(false);
     const [friends, setFriends] = useState<friend[]>([]);
     const [selectedFriend, setSelectedFriend] = useState<friend | null>(null);
+    const [serverOptions, setServerOptions] = useState(false);
+    const [settingsUI, setSettingsUI] = useState(false);
 
 
     useEffect(() => {
@@ -122,15 +126,13 @@ export default function ChannelsLayout() {
         }
     };
 
-    const handleLogout = async () => {
-        await signOut();
-        router.push("/login");
-    }
-
     const getProfile = async (uid: string) => {
+        if (!uid) {
+            return;
+        }
         const { data, error } = await supabase.from("users").select("*").eq("id", uid).single();
         if (error) {
-            alert(JSON.stringify(error));
+            alert(error.message);
             return;
         }
         setUser(data);
@@ -146,7 +148,7 @@ export default function ChannelsLayout() {
         const nanoid = customAlphabet("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", 6)
         const serverCode = nanoid()
         // alert(id);
-        const { data, error } = await supabase.from("server").insert({ id: id, name: name, icon: preview, serverCode: serverCode });
+        const { data, error } = await supabase.from("server").insert({ id: id, name: name, icon: preview, serverCode: serverCode, owner: user?.id });
         if (error) {
             return;
         }
@@ -161,6 +163,7 @@ export default function ChannelsLayout() {
             .insert({ userId: user?.id, serverId: id, role: 'owner' });
 
         await getJoinedServers();
+        setServerOptions(false);
     };
 
     const cancelServerCreation = async () => {
@@ -238,22 +241,6 @@ export default function ChannelsLayout() {
             console.error("Unexpected error deleting server:", err);
         }
     };
-
-    const removerUser = async () => {
-        if (!user?.id) { return; }
-        alert(user.id)
-        const { error } = await supabase
-            .from("users")
-            .delete()
-            .eq("id", user.id);
-
-        await deleteUser(user.id);
-
-        if (error) {
-            alert("Failed to Delete User:" + error.message);
-            return;
-        }
-    }
 
     const addChannel = async (name: string, type: string) => {
         const id = uuidv4();
@@ -376,7 +363,7 @@ export default function ChannelsLayout() {
     const copyText = async (text: string) => {
         try {
             await navigator.clipboard.writeText(text);
-            alert("Copied!");
+            alert("Copied! Server Id");
         } catch (err) {
             console.error("Copy failed", err);
         }
@@ -415,6 +402,11 @@ export default function ChannelsLayout() {
             .filter(Boolean);
 
         setFriends(formatted ?? []);
+    };
+
+    const handleRightClick = (e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setServerOptions(!serverOptions)
     };
 
     return (
@@ -606,6 +598,7 @@ export default function ChannelsLayout() {
                 </div>
             </div>)}
 
+            {settingsUI && (<div className="absolute w-full h-full z-1 flex items-center justify-center"><SettingsUi user={user!} close={() => setSettingsUI(false)} /></div>)}
 
             {/* Header */}
             <div className="relative min-h-8 w-full flex items-center gap-3 justify-center">
@@ -630,7 +623,7 @@ export default function ChannelsLayout() {
             <div className="flex flex-1 overflow-hidden">
                 {/* Left Side */}
                 <div className="w-85 h-full flex flex-col">
-                    <div className="w-full flex-1 min-h-0 flex">
+                    <div className="w-full flex-1 min-h-0 flex relative">
                         {/* Servers/Friends List */}
                         <div className="w-15 flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto overflow-x-hidden hide-scrollbar">
 
@@ -650,8 +643,15 @@ export default function ChannelsLayout() {
 
                             {servers.map((server) => {
                                 return (
-                                    <div key={server.id} onDoubleClick={() => removeServer(server.id)} onClick={() => { setSelectedServer(server); setSelectedChannel(null); setSelectedChannelId(null); setSelectedServerId(server.id) }} className="flex">
+                                    <div key={server.id} onContextMenu={handleRightClick} onClick={() => { setSelectedServer(server); setSelectedChannel(null); setSelectedChannelId(null); setSelectedServerId(server.id) }} className="flex">
                                         <div className="flex gap-2 items-center justify-center group">
+                                            {serverOptions && (<div className="absolute left-15 top-0 bg-[#28282d] w-50 h-auto rounded-md border border-[#303034] p-2 z-10 flex flex-col">
+                                                <button onClick={() => { setServerOptions(false); }} className="hover:bg-[#313135] text-start px-2 items-center w-full h-10 rounded-sm cursor-pointer">Invite to Server</button>
+                                                <div className="w-fullb border border-[#303034]"></div>
+                                                <button onClick={() => { removeServer(server.id); setServerOptions(false) }} className="hover:bg-[#35292d] text-start px-2 items-center w-full h-10 rounded-sm cursor-pointer text-[#d8706e]">Leave Server</button>
+                                                <div className="w-fullb border border-[#303034]"></div>
+                                                <button onClick={() => { copyText(selectedServer.serverCode); setServerOptions(false) }} className="hover:bg-[#313135] text-start px-2 items-center w-full h-10 rounded-sm cursor-pointer flex place-content-between">Copy Server Id <IconIdFilled /></button>
+                                            </div>)}
                                             <div className={`bg-white ${selectedServerId == server.id ? 'h-full' : 'h-2 group-hover:h-5'} w-1 rounded-r-md`}></div>
                                             <div className="w-10 h-10 overflow-hidden rounded-xl cursor-pointer bg-white/5 flex justify-center items-center font-semibold">
                                                 {server.icon ? <img src={server.icon} alt="Direct Message" className="object-cover w-full h-full" /> :
@@ -710,7 +710,7 @@ export default function ChannelsLayout() {
                                 <div className="w-full h-full flex flex-col p-3">
                                     <div className="w-full h-auto flex flex-col border-b border-[#303034]">
                                         <button onClick={() => { setSelectedFriend(null) }} className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconUserFilled /> Friends</button>
-                                        <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconDiamondFilled /> Nitro</button>
+                                        <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconMeteorFilled /> Nitro</button>
                                         <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconBasketFilled /> Shop</button>
                                         <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconZoomQuestionFilled /> Quest</button>
                                     </div>
@@ -744,7 +744,7 @@ export default function ChannelsLayout() {
                             {selectedServerId != 'me' && (<div className="flex flex-col">
                                 {/* Header */}
                                 <div className="h-12 w-full border-b flex gap-2 border-[#303034] px-2 py-1">
-                                    <span onClick={() => copyText(selectedServer.serverCode)} className="hover:bg-white/10 cursor-pointer flex items-center justify-center rounded-md w-full h-full font-semibold text-sm">{selectedServer?.name}</span>
+                                    <span className="hover:bg-white/10 cursor-pointer flex items-center justify-center rounded-md w-full h-full font-semibold text-sm">{selectedServer?.name}</span>
                                     <div className="flex items-center justify-center cursor-pointer hover:bg-white/10 p-1 rounded-md">
                                         <IconUserPlus stroke={2} size={20} />
                                     </div>
@@ -804,7 +804,7 @@ export default function ChannelsLayout() {
                     {/* Bottom */}
                     <div className="w-full h-18 p-2">
                         <div className="w-full h-full border border-[#303034] rounded-md bg-[#202024] flex gap-2 items-center px-1">
-                            <div onClick={handleLogout} className="flex items-center gap-3 hover:bg-[#333338] h-[90%] w-1/2 rounded-md cursor-pointer">
+                            <div className="flex items-center gap-3 hover:bg-[#333338] h-[90%] w-1/2 rounded-md cursor-pointer">
                                 {/* Profile Pic */}
                                 <div className="rounded-full w-8 h-8 overflow-hidden">
                                     <img src={profile} alt="Profile Image" className="object-cover w-full h-full" />
@@ -839,7 +839,7 @@ export default function ChannelsLayout() {
                                     </div>
                                 </div>
 
-                                <div onClick={removerUser} className="hover:bg-white/10 rounded-md p-1 cursor-pointer">
+                                <div onClick={() => setSettingsUI(!settingsUI)} className="hover:bg-white/10 rounded-md p-1 cursor-pointer">
                                     <IconSettingsFilled size={20} />
                                 </div>
                             </div>

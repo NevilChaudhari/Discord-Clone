@@ -66,6 +66,7 @@ export async function deleteUser(userId: string) {
     const { data, error } = await supabase.auth.admin.deleteUser(userId);
 
     if (error) {
+        alert(error.message);
         throw new Error(error.message);
     }
 

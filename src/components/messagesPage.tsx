@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { IconBellFilled, IconCheckFilled, IconGif, IconGift, IconHash, IconMoodHappy, IconPinFilled, IconPlus, IconSticker2, IconUser, IconUserFilled, IconXFilled } from "@tabler/icons-react";
 import { format } from "date-fns";
 import { useEffect, useRef, useState } from "react";
+import WIP from "./wip";
 
 interface user {
     id: string;
@@ -606,7 +607,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                 </div>)}
                 {selectedServer.id == 'Me' && (<div className="flex flex-col gap-3 h-full w-[20vw] min-w-60 border-l border-[#303034] px-3 py-5 md:hidden lg:flex">
                     {/* users template */}
-                    <span className="text-white/50">WIP</span>
+                    <span className="text-white/50"><WIP /></span>
                 </div>)}
             </div>
         </div>
