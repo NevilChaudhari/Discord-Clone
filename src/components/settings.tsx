@@ -23,6 +23,7 @@ interface SettingsUiProps {
     user?: user;
     close: MouseEventHandler<HTMLDivElement>;
     save?: () => void;
+    defaultTab?: string;
 };
 
 const settingsSections = [
@@ -62,11 +63,11 @@ const settingsSections = [
     },
 ];
 
-export default function SettingsUi({ user, close, save }: SettingsUiProps) {
+export default function SettingsUi({ user, close, save, defaultTab = 'My Account' }: SettingsUiProps) {
     const router = useRouter();
 
     const [search, setSearch] = useState('');
-    const [openedTab, setOpenedTab] = useState('My Account');
+    const [openedTab, setOpenedTab] = useState(defaultTab);
 
     const handleLogout = async () => {
         await signOut();
@@ -161,7 +162,8 @@ export default function SettingsUi({ user, close, save }: SettingsUiProps) {
                     </div>
 
                     {openedTab === 'My Account' && (<MyAccount user={user} edit={() => setOpenedTab('Profile')} />)}
-                    {openedTab === 'Profile' && (<Profile user={user} edit={() => setOpenedTab('Profile')} save={save}/>)}
+                    {openedTab === 'Profile' && (<Profile user={user} edit={() => setOpenedTab('Profile')} save={save} />)}
+                    {openedTab != 'Profile' && openedTab != 'My Account' && (<WIP />)}
                 </div>
             </div>
         </div>

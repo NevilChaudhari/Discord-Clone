@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { IconInbox, IconHelpFilled, IconUserFilled, IconBasketFilled, IconBrandSafari, IconChevronDown, IconDiamondFilled, IconDownload, IconHeadphonesFilled, IconHeadphonesOff, IconMicrophone, IconMicrophoneOff, IconPlus, IconSettingsFilled, IconX, IconZoomQuestionFilled, IconHash, IconUserPlus, IconVolume, IconIdFilled, IconMeteorFilled } from "@tabler/icons-react";
+import { IconInbox, IconHelpFilled, IconUserFilled, IconBasketFilled, IconBrandSafari, IconChevronDown, IconDiamondFilled, IconDownload, IconHeadphonesFilled, IconHeadphonesOff, IconMicrophone, IconMicrophoneOff, IconPlus, IconSettingsFilled, IconX, IconZoomQuestionFilled, IconHash, IconUserPlus, IconVolume, IconIdFilled, IconMeteorFilled, IconPencilFilled } from "@tabler/icons-react";
 import { profile } from "console";
 import { deleteUser } from "@/services/auth";
 import { supabase } from "@/lib/supabase";
@@ -44,6 +44,7 @@ interface friend {
     refcode: string;
     profile: string;
     chatId: string;
+    status: string;
 }
 
 export default function ChannelsLayout() {
@@ -86,6 +87,7 @@ export default function ChannelsLayout() {
     const [selectedFriend, setSelectedFriend] = useState<friend | null>(null);
     const [serverOptions, setServerOptions] = useState(false);
     const [settingsUI, setSettingsUI] = useState(false);
+    const [userCardUI, setUserCardUI] = useState(false);
 
 
     useEffect(() => {
@@ -381,15 +383,17 @@ export default function ChannelsLayout() {
         const { data, error } = await supabase
             .from("friends")
             .select(`
+            status,
             userId,
             friendId,
             user:users!friends_userId_fkey (*),
             friend:users!friends_friendId_fkey (*)
         `)
             .or(`userId.eq.${user.id},friendId.eq.${user.id}`)
-            .eq("status", "accepted");
+            .or(`status.eq.accepted,status.eq.none`)
+            // .eq("status", "accepted");
 
-        console.log("DATA:", data);
+        console.table(data);
         console.log("ERROR:", error);
 
         if (error) return;
@@ -725,18 +729,21 @@ export default function ChannelsLayout() {
                                         </div>
 
                                         {/* Friends Template */}
-                                        {friends.map((user) => {
+                                        {friends.map((friend) => {
+                                            console.table(friend);
                                             return (
-                                                <div onClick={() => { setSelectedFriend(user) }} key={user.id} className={`group flex items-center p-2 rounded-md cursor-pointer place-content-between ${selectedFriend?.id == user.id ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-white/50 hover:text-white'}`}>
+                                                <div onClick={() => { setSelectedFriend(friend) }} key={friend.id} className={`group flex items-center p-2 rounded-md cursor-pointer place-content-between ${selectedFriend?.id == friend.id ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-white/50 hover:text-white'}`}>
                                                     <div className="flex gap-3 items-center">
                                                         <div className="rounded-full overflow-hidden w-8 h-8">
-                                                            <img src={user.profile} alt="" className="w-full h-full object-center" />
+                                                            <img src={friend.profile} alt="" className="w-full h-full object-center" />
                                                         </div>
-                                                        {user.username}
+                                                        {friend.username}
                                                     </div>
-                                                    <div className="group-hover:flex rounded-full hover:bg-black/50 hidden items-center justify-center w-5 h-5 hover:text-red-500 cursor-pointer">
-                                                        <IconX stroke={2} size={15} />
-                                                    </div>
+                                                    {friend.status === 'none' && (
+                                                        <div className="group-hover:flex rounded-full hover:bg-black/50 hidden items-center justify-center w-5 h-5 hover:text-red-500 cursor-pointer">
+                                                            <IconX stroke={2} size={15} />
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )
                                         })}
@@ -804,9 +811,38 @@ export default function ChannelsLayout() {
                         </div>
                     </div>
                     {/* Bottom */}
-                    <div className="w-full h-18 p-2">
+                    <div className="relative w-full h-18 p-2">
+                        {/* Profile Card */}
+                        {userCardUI && (
+                            <div className="flex flex-col items-start absolute left-7 bottom-20 bg-[#242429] w-[80%] h-auto rounded-xl overflow-hidden shadow-xl">
+                                {/* Banner */}
+                                <div className="w-full min-h-30" style={{ backgroundColor: user?.banner }}></div>
+                                {/* Profile */}
+                                <div className="flex flex-col w-full h-full px-3 pb-5">
+                                    <div className="flex w-full">
+                                        <div className="relative min-w-28 min-h-13">
+                                            <div className="w-25 h-25 absolute z-10 -top-15 rounded-full overflow-hidden border-6 border-[#242429]">
+                                                <img src={preview ? preview : user?.profile} alt="" className="w-full h-full object-cover" />
+                                                {loading && <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                                    <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                </div>}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-col items-start h-full w-full">
+                                        <label className="text-white font-semibold text-xl">{user?.username}</label>
+                                        <label className="text-white text-sm">{user?.bio}</label>
+                                        <div className="flex flex-col gap-2 mt-3 w-full bg-[#2c2d32] p-2 rounded-md">
+                                            <button onClick={() => { setSettingsUI(true) }} className="flex gap-2 items-center text-white/50 hover:text-white cursor-pointer w-full hover:bg-[#35353a] px-3 py-1 rounded-md"><IconPencilFilled size={20} />Edit Profile</button>
+                                            <div className="border-b border-white/10 w-full"></div>
+                                            <button onClick={() => { copyText(user!.id) }} className="flex gap-2 items-center text-white/50 hover:text-white cursor-pointer w-full hover:bg-[#35353a] px-3 py-1 rounded-md"><IconIdFilled size={20} />Copy User ID</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>)}
                         <div className="w-full h-full border border-[#303034] rounded-md bg-[#202024] flex gap-2 items-center px-1">
-                            <div className="flex items-center gap-3 hover:bg-[#333338] h-[90%] w-1/2 rounded-md cursor-pointer">
+                            <div onClick={() => setUserCardUI(!userCardUI)} className="flex items-center gap-3 hover:bg-[#333338] h-[90%] w-1/2 rounded-md cursor-pointer">
                                 {/* Profile Pic */}
                                 <div className="rounded-full w-8 h-8 overflow-hidden">
                                     <img src={profile} alt="Profile Image" className="object-cover w-full h-full" />

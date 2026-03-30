@@ -1,8 +1,8 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
-import { IconBellFilled, IconCheckFilled, IconGif, IconGift, IconHash, IconMoodHappy, IconPinFilled, IconPlus, IconSticker2, IconUser, IconUserFilled, IconXFilled } from "@tabler/icons-react";
-import { format } from "date-fns";
+import { IconBellFilled, IconCheckFilled, IconDotsFilled, IconGif, IconGift, IconHash, IconMoodHappy, IconPinFilled, IconPlus, IconPlusFilled, IconSticker2, IconUser, IconUserFilled, IconXFilled } from "@tabler/icons-react";
+import { format, set } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 import WIP from "./wip";
 
@@ -69,6 +69,29 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
     const [pendingRequest, setPendingRequest] = useState<friend[]>([]);
     const [receivedRequest, setReceivedRequest] = useState<friend[]>([]);
     const [chatId, setChatId] = useState('');
+    const [selectedProfileCard, setSelectedProfileCard] = useState('');
+    const [showProfileCard, setShowProfileCard] = useState(false);
+    const [position, setPosition] = useState<"top" | "bottom">("bottom");
+    const [sendDM, setSendDM] = useState('');
+
+    const handleClick = (
+        e: React.MouseEvent<HTMLDivElement>,
+        id: string
+    ) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+
+        const CARD_HEIGHT = 260; // adjust based on your UI
+
+        const spaceBelow = window.innerHeight - rect.bottom;
+
+        if (spaceBelow < CARD_HEIGHT) {
+            setPosition("top"); // not enough space below → show above
+        } else {
+            setPosition("bottom"); // enough space → show below
+        }
+
+        setSelectedProfileCard(id);
+    };
 
     useEffect(() => {
         getUsers();
@@ -394,6 +417,36 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
         handlePendingRequest()
     }
 
+    const sendDirectMessage = async (fid: string, e: React.FormEvent) => {
+        e.preventDefault();
+        if (!user || !sendDM) {
+            alert('user or message is null')
+            return;
+        }
+        const { data: userData, error: userError } = await supabase
+            .from('friends')
+            .insert({
+                userId: user.id,
+                friendId: fid,
+                status: 'none'
+            })
+            .select();
+
+        if (userError) {
+            console.error(userError);
+            return;
+        }
+
+        alert(userData?.[0]?.chatId);
+
+        const { data, error } = await supabase.from('directMessage').insert({ senderId: user.id, message: sendDM, chatId: userData?.[0]?.chatId })
+        if (error) {
+            alert(error.message);
+            return;
+        }
+        setSendDM('');
+    };
+
     return (
         <div className="flex flex-1 flex-col text-white pb-2 w-full h-full">
             {/* header */}
@@ -413,7 +466,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                     {/* {chatId} */}
                 </div>)}
 
-                {selectedServer.id != 'Me' && selectedChannel && (<div className="flex gap-5">
+                {selectedServer.id != 'Me' && (<div className="flex gap-5">
                     <IconBellFilled size={20} className="text-white/50 hover:text-white cursor-pointer" />
                     <IconPinFilled size={20} className="text-white/50 hover:text-white cursor-pointer" />
                     <IconUserFilled size={20} className="text-white/50 hover:text-white cursor-pointer" onClick={() => { getServerUsers(); setShowUsers(!showUsers) }} />
@@ -592,17 +645,50 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                 </div>)}
 
                 {/* Show Users */}
-                {showUsers && selectedServer.id != 'Me' && selectedChannel && (<div className="flex flex-col gap-3 h-full w-[20vw] min-w-60 border-l border-[#303034] px-3 py-5">
+                {showUsers && selectedServer.id != 'Me' && (<div className="flex flex-col gap-3 h-full w-[20vw] min-w-60 border-l border-[#303034] px-3 py-5">
                     {/* users template */}
                     <span className="text-white/50">Server users:</span>
 
                     {serverUsers.map((su) => {
                         return (
-                            <div key={su.id} className="flex items-center gap-3 group hover:bg-white/5 px-2 py-1 rounded-md cursor-pointer">
+                            <div onClick={(e) => { setSelectedProfileCard(su.id); selectedProfileCard === su.id ? setShowProfileCard(!showProfileCard) : setShowProfileCard(true); handleClick(e, su.id) }} key={su.id} className={`flex relative items-center gap-3 group px-2 py-1 rounded-md cursor-pointer ${(selectedProfileCard === su.id && showProfileCard) ? 'bg-[#333338] text-white' : 'text-white/50 hover:bg-white/5'}`}>
+                                {/* Profile Card */}
+                                {selectedProfileCard === su.id && showProfileCard && (
+                                    <div className={`cursor-default flex flex-col items-start absolute right-80 bg-[#242429] w-80 h-auto rounded-xl overflow-hidden shadow-xl ${position === "top" ? "bottom-0" : "top-0"}`}>
+                                        {/* Banner */}
+                                        <div className="w-full min-h-30 relative flex" style={{ backgroundColor: su?.banner }}>
+                                            {selectedProfileCard !== user?.id && (<div className="absolute flex gap-2 right-2 top-2">
+                                                <div onClick={() => { handleFriendRequest(su.id); setSelectedProfileCard(''); }} className="flex w-7 h-7 bg-black/50 hover:bg-black/70 rounded-full items-center justify-center cursor-pointer"><IconPlusFilled /></div>
+                                                <div className="flex w-7 h-7 bg-black/50 hover:bg-black/70 rounded-full items-center justify-center cursor-pointer"><IconDotsFilled /></div>
+                                            </div>)}
+                                        </div>
+                                        {/* Profile */}
+                                        <div className="flex flex-col gap-5 w-full h-full px-3 pb-5">
+                                            <div className="flex w-full">
+                                                <div className="relative min-w-28 min-h-13">
+                                                    <div className="w-25 h-25 absolute z-10 -top-15 rounded-full overflow-hidden border-6 border-[#242429]">
+                                                        <img src={su.profile} alt="" className="w-full h-full object-cover" />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-col items-start h-full w-full">
+                                                <label className="text-white font-semibold text-xl">{su?.username}</label>
+                                                <label className="text-white text-sm">{su?.bio}</label>
+                                            </div>
+
+                                            {/* Message User */}
+                                            {selectedProfileCard !== user?.id && (<div className="flex bg-[#202024] w-full h-12 items-center justify-center gap-3 px-3 rounded-md overflow-hidden border border-[#303034]">
+                                                <form onSubmit={(e) => sendDirectMessage(su.id, e)} className="w-full h-full">
+                                                    <input value={sendDM} onChange={(e) => setSendDM(e.target.value)} type="text" className="w-full h-full focus:outline-0" placeholder={`Message @${su.username}`} />
+                                                </form>
+                                            </div>)}
+                                        </div>
+                                    </div>)}
                                 <div className="w-9 h-9 overflow-hidden rounded-full">
                                     <img src={su.profile} alt="" className="w-full h-full object-cover" />
                                 </div>
-                                <span className="text-white/50 group-hover:text-white">{su.username}</span>
+                                <span className="group-hover:text-white">{su.username}</span>
                             </div>
                         )
                     })}
