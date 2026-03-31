@@ -1,7 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
-import { IconBellFilled, IconCheckFilled, IconDotsFilled, IconGif, IconGift, IconHash, IconMoodHappy, IconPinFilled, IconPlus, IconPlusFilled, IconSticker2, IconUser, IconUserFilled, IconXFilled } from "@tabler/icons-react";
+import { IconBellFilled, IconCheckFilled, IconCopyFilled, IconDotsFilled, IconGif, IconGift, IconHash, IconMoodHappy, IconPencilFilled, IconPinFilled, IconPlus, IconPlusFilled, IconSticker2, IconTrashFilled, IconUser, IconUserFilled, IconXFilled } from "@tabler/icons-react";
 import { format, set } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 import WIP from "./wip";
@@ -73,6 +73,8 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
     const [showProfileCard, setShowProfileCard] = useState(false);
     const [position, setPosition] = useState<"top" | "bottom">("bottom");
     const [sendDM, setSendDM] = useState('');
+    const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+    const [editedMessage, setEditedMessage] = useState('');
 
     const handleClick = (
         e: React.MouseEvent<HTMLDivElement>,
@@ -139,18 +141,34 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
             .on(
                 "postgres_changes",
                 {
-                    event: "INSERT",
+                    event: "*",
                     schema: "public",
                     table: "messages",
                     filter: `destination=eq.${selectedChannelId}`,
                 },
                 (payload) => {
-                    const newMessage = payload.new as Messages;
+                    console.log("Realtime event:", payload.eventType, payload);
+                    if (payload.eventType === "INSERT") {
+                        const newMessage = payload.new as Messages;
+                        setMessages((prev) => {
+                            if (prev.some((m) => m.id === newMessage.id)) return prev;
+                            return [...prev, newMessage];
+                        });
+                    }
 
-                    setMessages((prev) => {
-                        if (prev.some((m) => m.id === newMessage.id)) return prev;
-                        return [...prev, newMessage];
-                    });
+                    if (payload.eventType === "UPDATE") {
+                        const updatedMessage = payload.new as Messages;
+                        setMessages((prev) =>
+                            prev.map((m) => (m.id === updatedMessage.id ? updatedMessage : m))
+                        );
+                    }
+
+                    if (payload.eventType === "DELETE") {
+                        const deletedMessage = payload.old as { id: number };
+                        setMessages((prev) =>
+                            prev.filter((m) => m.id !== deletedMessage.id)
+                        );
+                    }
                 }
             )
             .subscribe();
@@ -162,54 +180,29 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
 
     // DM's
 
-    useEffect(() => {
-        const fetchMessages = async () => {
-            if (!user) {
-                return;
-            }
-            const { data } = await supabase
-                .from("directMessage")
-                .select("*")
-                .or(`senderId.eq.${user.id},receiverId.eq.${user.id}`)
-                .order("created_at");
+    // useEffect(() => {
+    //     const fetchMessages = async () => {
+    //         if (!user) {
+    //             return;
+    //         }
+    //         const { data } = await supabase
+    //             .from("directMessage")
+    //             .select("*")
+    //             .or(`senderId.eq.${user.id},receiverId.eq.${user.id}`)
+    //             .order("created_at");
 
-            setDirectMessages(data || []);
-        };
+    //         setDirectMessages(data || []);
+    //     };
 
-        fetchMessages();
-    }, [selectedFriend]);
-    useEffect(() => {
-        const channel = supabase
-            .channel(`messages-${selectedChannelId}`)
-            .on(
-                "postgres_changes",
-                {
-                    event: "INSERT",
-                    schema: "public",
-                    table: "directMessage",
-                    filter: `destination=eq.${selectedChannelId}`,
-                },
-                (payload) => {
-                    const newMessage = payload.new as DirectMessages;
+    //     fetchMessages();
+    // }, [selectedFriend]);
 
-                    setDirectMessages((prev) => {
-                        if (prev.some((m) => m.id === newMessage.id)) return prev;
-                        return [...prev, newMessage];
-                    });
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [selectedFriend]);
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages]);
+    }, [messages, directMessages]);
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -217,8 +210,10 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
             alert('user or message is null')
             return;
         }
+        const msg = message.trim();
+        setMessage('');
         if (selectedServer.id == 'Me' && selectedFriend) {
-            const { data, error } = await supabase.from('directMessage').insert({ senderId: user.id, message: message, chatId: chatId })
+            const { data, error } = await supabase.from('directMessage').insert({ senderId: user.id, message: msg, chatId: chatId })
             if (error) {
                 alert(error.message);
                 return;
@@ -232,7 +227,44 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
             }
         }
         // getMessage();
-        setMessage('')
+    }
+
+    const handleDeleteMessage = async (id: number) => {
+        // alert(id)
+        if (selectedServer.id == 'Me' && selectedFriend) {
+            const { data, error } = await supabase.from('directMessage').delete().eq('id', id);
+            if (error) {
+                alert(error.message);
+                return;
+            }
+        }
+        if (selectedServer.id != 'Me' && selectedChannel) {
+            const { data, error } = await supabase.from('messages').delete().eq('id', id);
+            if (error) {
+                alert(error.message);
+                return;
+            }
+        }
+    }
+
+    const handleEditedMessage = async (e: React.FormEvent, id: number, editedMessage: string) => {
+        e.preventDefault();
+        // alert(id)
+        if (selectedServer.id == 'Me' && selectedFriend) {
+            const { data, error } = await supabase.from('directMessage').update({ message: editedMessage }).eq('id', id);
+            if (error) {
+                alert(error.message);
+                return;
+            }
+        }
+        if (selectedServer.id != 'Me' && selectedChannel) {
+            const { data, error } = await supabase.from('messages').update({ message: editedMessage }).eq('id', id);
+            if (error) {
+                alert(error.message);
+                return;
+            }
+        }
+        setEditedMessage('');
     }
 
     useEffect(() => {
@@ -262,19 +294,34 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
             .on(
                 "postgres_changes",
                 {
-                    event: "INSERT",
+                    event: "*",
                     schema: "public",
                     table: "directMessage",
                     filter: `chatId=eq.${chatId}`,
                 },
                 (payload) => {
-                    const newMessage = payload.new as DirectMessages;
+                    console.log("Realtime event:", payload.eventType, payload);
+                    if (payload.eventType === "INSERT") {
+                        const newMessage = payload.new as DirectMessages;
+                        setDirectMessages((prev) => {
+                            if (prev.find((m) => m.id === newMessage.id)) return prev;
+                            return [...prev, newMessage];
+                        });
+                    }
 
-                    // Avoid duplicates (important)
-                    setDirectMessages((prev) => {
-                        if (prev.find((m) => m.id === newMessage.id)) return prev;
-                        return [...prev, newMessage];
-                    });
+                    if (payload.eventType === "UPDATE") {
+                        const updatedMessage = payload.new as DirectMessages;
+                        setDirectMessages((prev) =>
+                            prev.map((m) => (m.id === updatedMessage.id ? updatedMessage : m))
+                        );
+                    }
+
+                    if (payload.eventType === "DELETE") {
+                        const deletedMessage = payload.old as { id: number };
+                        setDirectMessages((prev) =>
+                            prev.filter((m) => m.id !== deletedMessage.id)
+                        );
+                    }
                 }
             )
             .subscribe();
@@ -447,6 +494,15 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
         setSendDM('');
     };
 
+    const copyText = async (text: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            alert("Copied!");
+        } catch (err) {
+            console.error("Copy failed", err);
+        }
+    };
+
     return (
         <div className="flex flex-1 flex-col text-white pb-2 w-full h-full">
             {/* header */}
@@ -477,50 +533,97 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                 </div>)}
             </div>
             {/* Main Chat Area */}
-            <div className="flex w-full h-full">
+            <div className="flex w-full h-full overflow-hidden">
 
                 {/* Left Side */}
                 {(selectedServer.id != 'Me' || selectedFriend) && (<div className="flex flex-col w-full h-full">
-                    {/* Messages Area */}
-                    {(selectedServer.id != 'Me' && selectedChannel) && (<div ref={bottomRef} className="w-full h-full py-2 flex flex-col justify-end gap-5 overflow-y-auto scrollbar-minimal">
 
-                        {messages.map((message) => {
-                            const user = users.find(u => u.id === message.sender);
+                    {/* Messages Area */}
+                    {(selectedServer.id != 'Me' && selectedChannel) && (<div ref={bottomRef} className="flex-1 min-h-0 py-2 flex flex-col-reverse gap-5 overflow-y-auto scrollbar-minimal">
+
+                        {[...messages].reverse().map((message) => {
+                            const muser = users.find(u => u.id === message.sender);
 
                             return (
-                                <div key={message.id} className="hover:bg-[#242428] p-2 flex gap-3">
+                                <div key={message.id} className="hover:bg-[#242428] p-2 flex gap-3 relative group">
+                                    <div className="hidden absolute w-auto h-8 bg-[#242428] group-hover:flex cursor-pointer rounded-md -top-4 right-10 border border-[#303034] items-center justify-end px-1 py-0.5 gap-1 hover:shadow-xl/20">
+                                        {message.sender === user?.id && (<div onClick={() => { setEditingMessageId(message.id); setEditedMessage(message.message) }} className="text-white/50 hover:text-white hover:bg-[#303034] w-8 h-full flex items-center justify-center rounded-sm">
+                                            <IconPencilFilled size={20} />
+                                        </div>)}
+                                        <div onClick={() => { copyText(message.message) }} className="text-white/50 hover:text-white hover:bg-[#303034] w-8 h-full flex items-center justify-center rounded-sm">
+                                            <IconCopyFilled size={20} />
+                                        </div>
+                                        {message.sender === user?.id && (<div onClick={() => { handleDeleteMessage(message.id) }} className="text-red-500 hover:bg-[#303034] w-8 h-full flex items-center justify-center rounded-sm">
+                                            <IconTrashFilled size={20} />
+                                        </div>)}
+                                    </div>
                                     <div className="w-10 h-10 rounded-full overflow-hidden">
-                                        <img src={user?.profile} className="h-full w-full object-cover" />
+                                        <img src={muser?.profile} className="h-full w-full object-cover" />
                                     </div>
 
-                                    <div className="flex flex-col">
+                                    <div className="flex flex-col w-full pr-5">
                                         <div className="flex gap-3">
-                                            <span className="text-sm font-semibold">{user?.username}</span>
+                                            <span className="text-sm font-semibold">{muser?.username}</span>
                                             <span className="text-xs text-white/50">{format(new Date(message.created_at), "hh:mm a")}</span>
                                         </div>
-                                        {message.message}
+                                        {editingMessageId !== message.id && (<span className="text-white">{message.message}</span>)}
+                                        {editingMessageId === message.id && (<form onSubmit={(e) => { setEditingMessageId(null); handleEditedMessage(e, message.id, editedMessage); }} className="w-full my-2">
+                                            <div className="flex w-full h-13 px-5 py-0.5 items-center justify-end border border-[#303034] rounded-md gap-1">
+                                                <input type="text" value={editedMessage} onChange={(e) => setEditedMessage(e.target.value)} className="w-full h-full focus:outline-0 font-thin text-white/60" />
+                                            </div>
+                                            <div className="flex gap-1">
+                                                <span className="text-xs py-1">escape to</span>
+                                                <span onClick={() => { setEditingMessageId(null) }} className="text-xs py-1 text-blue-500 hover:underline cursor-pointer">cancel</span>
+                                                <span className="text-xs py-1">- enter to save</span>
+                                                <span onClick={(e) => { setEditingMessageId(null); handleEditedMessage(e, message.id, editedMessage); }} className="text-xs py-1 text-blue-500 hover:underline cursor-pointer">save</span>
+                                            </div>
+                                        </form>)}
                                     </div>
                                 </div>
                             );
                         })}
 
                     </div>)}
-                    {(selectedServer.id == 'Me' && selectedFriend) && (<div ref={bottomRef} className="w-full h-full py-2 flex flex-col justify-end gap-5 overflow-y-auto scrollbar-minimal">
-                        {directMessages.map((message) => {
-                            const user = users.find(u => u.id === message.senderId);
+                    {(selectedServer.id == 'Me' && selectedFriend) && (<div ref={bottomRef} className="flex-1 min-h-0 py-2 flex flex-col-reverse overflow-y-auto scrollbar-minimal">
+                        {[...directMessages].reverse().map((message) => {
+                            const muser = users.find(u => u.id === message.senderId);
 
                             return (
-                                <div key={message.id} className="hover:bg-[#242428] p-2 flex gap-3">
-                                    <div className="w-10 h-10 rounded-full overflow-hidden">
-                                        <img src={user?.profile} className="h-full w-full object-cover" />
+                                <div key={message.id} className="hover:bg-[#242428] group p-2 flex gap-3 relative">
+                                    {/* <span>{directMessages[directMessages.length - 2]?.senderId}</span> */}
+                                    <div className="hidden absolute w-auto h-8 bg-[#242428] group-hover:flex cursor-pointer rounded-md -top-4 right-10 border border-[#303034] items-center justify-end px-1 py-0.5 gap-1 hover:shadow-xl/20">
+                                        {message.senderId === user?.id && (<div onClick={() => { setEditingMessageId(message.id); setEditedMessage(message.message) }} className="text-white/50 hover:text-white hover:bg-[#303034] w-8 h-full flex items-center justify-center rounded-sm">
+                                            <IconPencilFilled size={20} />
+                                        </div>)}
+                                        <div onClick={() => { copyText(message.message) }} className="text-white/50 hover:text-white hover:bg-[#303034] w-8 h-full flex items-center justify-center rounded-sm">
+                                            <IconCopyFilled size={20} />
+                                        </div>
+                                        {message.senderId === user?.id && (<div onClick={() => { handleDeleteMessage(message.id) }} className="text-red-500 hover:bg-[#281c20] w-8 h-full flex items-center justify-center rounded-sm">
+                                            <IconTrashFilled size={20} />
+                                        </div>)}
                                     </div>
 
-                                    <div className="flex flex-col">
+                                    <div className="w-10 h-10 rounded-full overflow-hidden">
+                                        <img src={muser?.profile} className="h-full w-full object-cover" />
+                                    </div>
+
+                                    <div className="flex flex-col w-full pr-5">
                                         <div className="flex gap-3">
-                                            <span className="text-sm font-semibold">{user?.username}</span>
+                                            <span className="text-sm font-semibold">{muser?.username}</span>
                                             <span className="text-xs text-white/50">{format(new Date(message.created_at), "hh:mm a")}</span>
                                         </div>
-                                        {message.message}
+                                        {editingMessageId !== message.id && (<span className="text-white">{message.message}</span>)}
+                                        {editingMessageId === message.id && (<form onSubmit={(e) => { setEditingMessageId(null); handleEditedMessage(e, message.id, editedMessage); }} className="w-full my-2">
+                                            <div className="flex w-full h-13 px-5 py-0.5 items-center justify-end border border-[#303034] rounded-md gap-1">
+                                                <input type="text" value={editedMessage} onChange={(e) => setEditedMessage(e.target.value)} className="w-full h-full focus:outline-0 font-thin text-white/60" />
+                                            </div>
+                                            <div className="flex gap-1">
+                                                <span className="text-xs py-1">escape to</span>
+                                                <span onClick={() => { setEditingMessageId(null) }} className="text-xs py-1 text-blue-500 hover:underline cursor-pointer">cancel</span>
+                                                <span className="text-xs py-1">- enter to save</span>
+                                                <span onClick={(e) => { setEditingMessageId(null); handleEditedMessage(e, message.id, editedMessage); }} className="text-xs py-1 text-blue-500 hover:underline cursor-pointer">save</span>
+                                            </div>
+                                        </form>)}
                                     </div>
                                 </div>
                             );
