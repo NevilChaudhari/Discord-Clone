@@ -886,7 +886,7 @@ export default function ChannelsLayout() {
                 </div>
 
                 {/* Right Side */}
-                <div className="h-full w-full bg-[#1a1a1e] border-t border-[#303034] flex flex-col">
+                <div className="h-full w-full min-w-0 bg-[#1a1a1e] border-t border-[#303034] flex flex-col">
                     <MessagesPage selectedChannel={selectedChannel ?? ""} selectedChannelId={selectedChannelId ?? ""} user={user!} selectedServer={selectedServer} selectedFriend={selectedFriend!} />
                 </div>
             </div>

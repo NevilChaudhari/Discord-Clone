@@ -5,6 +5,8 @@ import { IconBellFilled, IconCheckFilled, IconCopyFilled, IconDotsFilled, IconGi
 import { format, set } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 import WIP from "./wip";
+import { uploadToImgBB } from "@/lib/imgbb";
+import { TailSpin } from "react-loader-spinner";
 
 interface user {
     id: string;
@@ -26,12 +28,20 @@ interface friend {
     friend?: user;
 }
 
+type Attachment = {
+    id: number;
+    messageId: number;
+    fileUrl: string;
+    fileType: string;
+}
+
 interface Messages {
     id: number;
     sender: string;
     message: string;
     destination: string;
     created_at: string;
+    attachments: Attachment[];
 }
 
 interface DirectMessages {
@@ -40,6 +50,7 @@ interface DirectMessages {
     receiverId: string;
     message: string;
     created_at: string;
+    attachments: Attachment[];
 }
 
 interface Server {
@@ -75,6 +86,8 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
     const [sendDM, setSendDM] = useState('');
     const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
     const [editedMessage, setEditedMessage] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [preview, setPreview] = useState([] as string[]);
 
     const handleClick = (
         e: React.MouseEvent<HTMLDivElement>,
@@ -126,9 +139,21 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
         const fetchMessages = async () => {
             const { data } = await supabase
                 .from("messages")
-                .select("*")
+                .select(`
+                    *,
+                    attachments (
+                        id,
+                        fileUrl,
+                        messageId,
+                        fileType,
+                        server
+                    )
+                `)
                 .eq("destination", selectedChannelId)
                 .order("created_at");
+
+            console.log('*********************************');
+            console.table(data);
 
             setMessages(data || []);
         };
@@ -178,6 +203,69 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
         };
     }, [selectedChannelId]);
 
+    useEffect(() => {
+        if (!selectedChannelId) return;
+
+        const attachmentsChannel = supabase
+            .channel(`attachments-${selectedChannelId}`)
+            .on(
+                "postgres_changes",
+                {
+                    event: "*",
+                    schema: "public",
+                    table: "attachments",
+                },
+                (payload) => {
+                    console.log("Realtime event:", payload.eventType, payload);
+                    if (payload.eventType === "INSERT") {
+                        const newAttachment = payload.new as Attachment;
+                        setMessages((prev) =>
+                            prev.map((m) =>
+                                m.id === newAttachment.messageId
+                                    ? { ...m, attachments: [...(m.attachments || []), newAttachment] }
+                                    : m
+                            )
+                        );
+                    }
+
+                    if (payload.eventType === "UPDATE") {
+                        const updatedAttachment = payload.new as Attachment;
+                        setMessages((prev) =>
+                            prev.map((m) =>
+                                m.id === updatedAttachment.messageId
+                                    ? {
+                                        ...m,
+                                        attachments: m.attachments.map((a) =>
+                                            a.id === updatedAttachment.id ? updatedAttachment : a
+                                        ),
+                                    }
+                                    : m
+                            )
+                        );
+                    }
+
+                    if (payload.eventType === "DELETE") {
+                        const deletedAttachment = payload.old as { id: number; messageId: number };
+                        setMessages((prev) =>
+                            prev.map((m) =>
+                                m.id === deletedAttachment.messageId
+                                    ? {
+                                        ...m,
+                                        attachments: m.attachments.filter((a) => a.id !== deletedAttachment.id),
+                                    }
+                                    : m
+                            )
+                        );
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(attachmentsChannel);
+        };
+    }, [selectedChannelId]);
+
     // DM's
 
     // useEffect(() => {
@@ -206,24 +294,56 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !message) {
+        if (!user || (!message && !preview.length)) {
             alert('user or message is null')
             return;
         }
         const msg = message.trim();
+        const files = preview;
+        setPreview([]);
         setMessage('');
         if (selectedServer.id == 'Me' && selectedFriend) {
-            const { data, error } = await supabase.from('directMessage').insert({ senderId: user.id, message: msg, chatId: chatId })
+            const { data: messageData, error } = await supabase.from('directMessage').insert({ senderId: user.id, message: msg, chatId: chatId }).select().single();
             if (error) {
                 alert(error.message);
                 return;
             }
+            if (files.length) {
+                const { data, error: attachmentError } = await supabase
+                    .from("attachments")
+                    .insert(
+                        files.map((url) => ({
+                            fileUrl: url,
+                            messageId: messageData?.id,
+                            fileType: 'image',
+                            server: false,
+                        }))
+                    );
+                if (attachmentError) {
+                    alert(attachmentError.message);
+                }
+            }
         }
         if (selectedServer.id != 'Me' && selectedChannel) {
-            const { data, error } = await supabase.from('messages').insert({ sender: user.id, message: message, destination: selectedChannelId })
+            const { data: messageData, error } = await supabase.from('messages').insert({ sender: user.id, message: message, destination: selectedChannelId }).select().single();
             if (error) {
                 alert(error.message);
                 return;
+            }
+            if (files.length) {
+                const { data, error: attachmentError } = await supabase
+                    .from("attachments")
+                    .insert(
+                        files.map((url) => ({
+                            fileUrl: url,
+                            messageId: messageData?.id,
+                            fileType: 'image',
+                            server: true,
+                        }))
+                    );
+                if (attachmentError) {
+                    alert(attachmentError.message);
+                }
             }
         }
         // getMessage();
@@ -267,6 +387,15 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
         setEditedMessage('');
     }
 
+    const handleDeleteAttachment = async (id: number) => {
+        // alert(id)
+        const { data, error } = await supabase.from('attachments').delete().eq('id', id);
+        if (error) {
+            alert(error.message);
+            return;
+        }
+    }
+
     useEffect(() => {
         if (!chatId) return;
 
@@ -274,7 +403,16 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
         const fetchMessages = async () => {
             const { data, error } = await supabase
                 .from("directMessage")
-                .select("*")
+                .select(`
+                    *,
+                    attachments (
+                        id,
+                        fileUrl,
+                        messageId,
+                        fileType,
+                        server
+                    )
+                `)
                 .eq("chatId", chatId)
                 .order("created_at", { ascending: true });
 
@@ -503,6 +641,32 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
         }
     };
 
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setLoading(true); // start spinner
+        try {
+            const { url, deleteUrl } = await uploadToImgBB(file);
+            setPreview(prev => [...prev, url]);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false); // stop spinner regardless of success/failure
+        }
+    };
+
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+    const openFilePicker = () => {
+        if (preview.length >= 4) {
+            return alert("You can only upload up to 4 images per message.");
+        }
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
+        }
+    };
+
     return (
         <div className="flex flex-1 flex-col text-white pb-2 w-full h-full">
             {/* header */}
@@ -543,7 +707,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
 
                         {[...messages].reverse().map((message) => {
                             const muser = users.find(u => u.id === message.sender);
-
+                            console.table(message)
                             return (
                                 <div key={message.id} className="hover:bg-[#242428] p-2 flex gap-3 relative group">
                                     <div className="hidden absolute w-auto h-8 bg-[#242428] group-hover:flex cursor-pointer rounded-md -top-4 right-10 border border-[#303034] items-center justify-end px-1 py-0.5 gap-1 hover:shadow-xl/20">
@@ -566,7 +730,29 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                                             <span className="text-sm font-semibold">{muser?.username}</span>
                                             <span className="text-xs text-white/50">{format(new Date(message.created_at), "hh:mm a")}</span>
                                         </div>
-                                        {editingMessageId !== message.id && (<span className="text-white">{message.message}</span>)}
+                                        {editingMessageId !== message.id && message.message.trim() !== '' && (<span className="text-white">{message.message}</span>)}
+                                        {message.attachments?.length > 0 && (
+                                            <div className="flex gap-2 mt-1">
+                                                {message.attachments.map((attachment) => (
+                                                    <div key={attachment.id} className="relative">
+                                                        {attachment.fileType === 'image' && (
+                                                            <div className="flex w-50 h-50 rounded-md overflow-hidden border border-[#303034] bg-[#17171a] relative group/img cursor-pointer">
+                                                                <img
+                                                                    src={attachment.fileUrl}
+                                                                    className="w-full h-full object-cover"
+                                                                    onClick={() => window.open(attachment.fileUrl, "_blank")}
+                                                                />
+                                                                {message.attachments.length > 1 && (
+                                                                    <div onClick={() => handleDeleteAttachment(attachment.id)} className="absolute top-2 right-2 cursor-pointer text-red-500 hover:bg-black bg-[#222327] border border-[#303034] w-8 h-8 hidden group-hover/img:flex items-center justify-center rounded-sm">
+                                                                        <IconTrashFilled size={20} />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                         {editingMessageId === message.id && (<form onSubmit={(e) => { setEditingMessageId(null); handleEditedMessage(e, message.id, editedMessage); }} className="w-full my-2">
                                             <div className="flex w-full h-13 px-5 py-0.5 items-center justify-end border border-[#303034] rounded-md gap-1">
                                                 <input type="text" value={editedMessage} onChange={(e) => setEditedMessage(e.target.value)} className="w-full h-full focus:outline-0 font-thin text-white/60" />
@@ -631,30 +817,51 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
 
                     </div>)}
 
-                    <div className="px-3 w-full h-15 items-center">
-                        {((selectedServer.id == 'Me' && selectedFriend) || (selectedServer.id != 'Me' && selectedChannel)) && (<div className="flex px-3 gap-5 items-center rounded-md border border-[#303034] bg-[#222327] w-full h-full">
+                    <div className="px-3 w-full min-h-15 h-auto items-center">
+                        {((selectedServer.id == 'Me' && selectedFriend) || (selectedServer.id != 'Me' && selectedChannel)) && (<div className="flex flex-col px-3 gap-5 items-start justify-center rounded-md border border-[#303034] bg-[#222327] w-full h-full overflow-hidden">
                             {/* add Files */}
-                            <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer hover:bg-white/20 p-1 rounded-md">
-                                <IconPlus stroke={2} />
-                            </div>
-                            {/* Message Input */}
-                            <form onSubmit={handleSendMessage} className="w-full h-full">
-                                {selectedServer.id != 'Me' && selectedChannel && (<input type="text" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={`Message #${selectedChannel}`} className="w-full h-full focus:outline-0 font-thin text-white/60" />)}
-                                {selectedServer.id == 'Me' && selectedFriend && (<input type="text" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={`Message @${selectedFriend.username}`} className="w-full h-full focus:outline-0 font-thin text-white/60" />)}
-                            </form>
-                            {/* Extra Options */}
-                            <div className="flex gap-2">
-                                <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
-                                    <IconGift stroke={2} />
+                            {(preview.length > 0 || loading) && (<div className="flex gap-2 items-center pt-4 overflow-x-auto">
+                                {preview.map((url, index) => (<div key={index} className="relative rounded-md overflow-hidden w-42 h-30 border border-[#303034] bg-[#17171a] flex items-center justify-center">
+                                    <img src={url} alt="" className="w-full h-full object-cover" />
+                                    {loading && (
+                                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                            <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+                                        </div>
+                                    )}
+                                    {!loading && preview && (<div onClick={() => { setPreview((prev) => prev.filter((_, i) => i !== index)); }} className="absolute top-2 right-2 cursor-pointer text-red-500 hover:bg-black bg-[#222327] border border-[#303034] w-8 h-8 flex items-center justify-center rounded-sm">
+                                        <IconTrashFilled size={20} />
+                                    </div>)}
+                                </div>))}
+                            </div>)}
+                            <div className="flex w-full h-10 items-center gap-3">
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                    accept="image/*"
+                                    onChange={handleFileChange} />
+                                <div onClick={openFilePicker} className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer hover:bg-white/20 p-1 rounded-md">
+                                    <IconPlus stroke={2} />
                                 </div>
-                                <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
-                                    <IconGif stroke={2} />
-                                </div>
-                                <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
-                                    <IconSticker2 stroke={2} />
-                                </div>
-                                <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
-                                    <IconMoodHappy stroke={2} />
+                                {/* Message Input */}
+                                <form onSubmit={handleSendMessage} className="w-full h-full">
+                                    {selectedServer.id != 'Me' && selectedChannel && (<input type="text" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={`Message #${selectedChannel}`} className="w-full h-full focus:outline-0 font-thin text-white" />)}
+                                    {selectedServer.id == 'Me' && selectedFriend && (<input type="text" value={message} onChange={(e) => setMessage(e.target.value)} placeholder={`Message @${selectedFriend.username}`} className="w-full h-full focus:outline-0 font-thin text-white" />)}
+                                </form>
+                                {/* Extra Options */}
+                                <div className="flex gap-2">
+                                    <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
+                                        <IconGift stroke={2} />
+                                    </div>
+                                    <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
+                                        <IconGif stroke={2} />
+                                    </div>
+                                    <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
+                                        <IconSticker2 stroke={2} />
+                                    </div>
+                                    <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
+                                        <IconMoodHappy stroke={2} />
+                                    </div>
                                 </div>
                             </div>
                         </div>)}
