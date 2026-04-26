@@ -419,7 +419,7 @@ export default function ChannelsLayout() {
         <div className="bg-[#121214] w-screen h-dvh overflow-hidden flex flex-col relative">
 
             {/* Add Server UI */}
-            {addServerUI && (<div className="absolute w-full h-full">
+            {addServerUI && (<div className="absolute w-full h-full z-999">
                 <div className="relative flex items-center justify-center w-full h-full bg-black/50">
                     <div className="absolute w-120 h-auto bg-[#242429] rounded-xl p-5 flex flex-col gap-10">
                         <div className="flex flex-col">
@@ -516,7 +516,7 @@ export default function ChannelsLayout() {
             </div>)}
 
             {/* Server Join/Add Menu */}
-            {addServerMenu && (<div className="absolute w-full h-full">
+            {addServerMenu && (<div className="absolute w-full h-full z-999">
                 <div className="relative flex items-center justify-center w-full h-full bg-black/50">
                     <div className="absolute w-120 h-auto bg-[#242429] rounded-xl p-5 flex flex-col gap-10">
                         {/* Join a server */}

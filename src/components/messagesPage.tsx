@@ -109,6 +109,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
     };
 
     useEffect(() => {
+        setUsers([]);
         getUsers();
     }, [messages, directMessages])
 
@@ -173,18 +174,23 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                 },
                 (payload) => {
                     console.log("Realtime event:", payload.eventType, payload);
+                    // ❌ newMessage from realtime has no attachments field
                     if (payload.eventType === "INSERT") {
                         const newMessage = payload.new as Messages;
                         setMessages((prev) => {
                             if (prev.some((m) => m.id === newMessage.id)) return prev;
-                            return [...prev, newMessage];
+                            return [...prev, newMessage]; // attachments is undefined → crashes on .map/.filter later
                         });
                     }
 
                     if (payload.eventType === "UPDATE") {
                         const updatedMessage = payload.new as Messages;
                         setMessages((prev) =>
-                            prev.map((m) => (m.id === updatedMessage.id ? updatedMessage : m))
+                            prev.map((m) =>
+                                m.id === updatedMessage.id
+                                    ? { ...updatedMessage, attachments: m.attachments }
+                                    : m
+                            )
                         );
                     }
 
@@ -215,10 +221,10 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                     schema: "public",
                     table: "attachments",
                 },
-                (payload) => {
+                async (payload) => {
                     console.log("Realtime event:", payload.eventType, payload);
                     if (payload.eventType === "INSERT") {
-                        const newAttachment = payload.new as Attachment;
+                        const newAttachment = payload.new as Attachment; // ✅ correct type
                         setMessages((prev) =>
                             prev.map((m) =>
                                 m.id === newAttachment.messageId
@@ -300,11 +306,16 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
         }
         const msg = message.trim();
         const files = preview;
+        const savedMessage = msg;
+        const savedPreview = [...preview];
         setPreview([]);
         setMessage('');
         if (selectedServer.id == 'Me' && selectedFriend) {
             const { data: messageData, error } = await supabase.from('directMessage').insert({ senderId: user.id, message: msg, chatId: chatId }).select().single();
             if (error) {
+                setMessage(savedMessage);
+                setPreview(savedPreview);
+                alert('Failed to send: ' + error.message);
                 alert(error.message);
                 return;
             }
@@ -325,7 +336,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
             }
         }
         if (selectedServer.id != 'Me' && selectedChannel) {
-            const { data: messageData, error } = await supabase.from('messages').insert({ sender: user.id, message: message, destination: selectedChannelId }).select().single();
+            const { data: messageData, error } = await supabase.from('messages').insert({ sender: user.id, message: msg, destination: selectedChannelId }).select().single();
             if (error) {
                 alert(error.message);
                 return;
@@ -370,31 +381,51 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
     const handleEditedMessage = async (e: React.FormEvent, id: number, editedMessage: string) => {
         e.preventDefault();
         // alert(id)
+        const trimmed = editedMessage?.trim();
+        setEditedMessage('');
         if (selectedServer.id == 'Me' && selectedFriend) {
-            const { data, error } = await supabase.from('directMessage').update({ message: editedMessage }).eq('id', id);
+            const { data, error } = await supabase.from('directMessage').update({ message: trimmed }).eq('id', id);
             if (error) {
                 alert(error.message);
                 return;
             }
         }
         if (selectedServer.id != 'Me' && selectedChannel) {
-            const { data, error } = await supabase.from('messages').update({ message: editedMessage }).eq('id', id);
+            const { data, error } = await supabase.from('messages').update({ message: trimmed }).eq('id', id);
             if (error) {
                 alert(error.message);
                 return;
             }
         }
-        setEditedMessage('');
     }
 
-    const handleDeleteAttachment = async (id: number) => {
-        // alert(id)
-        const { data, error } = await supabase.from('attachments').delete().eq('id', id);
+    const handleDeleteAttachment = async (id: number, messageId: number) => {
+        // ✅ update UI immediately
+        setMessages((prev) =>
+            prev.map((m) =>
+                m.id === messageId
+                    ? { ...m, attachments: m.attachments.filter((a) => a.id !== id) }
+                    : m
+            )
+        );
+
+        const { error } = await supabase.from('attachments').delete().eq('id', id);
         if (error) {
             alert(error.message);
-            return;
+            // ✅ rollback if delete failed — refetch attachments for that message
+            const { data } = await supabase
+                .from('attachments')
+                .select('*')
+                .eq('messageId', messageId);
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m.id === messageId
+                        ? { ...m, attachments: data || [] }
+                        : m
+                )
+            );
         }
-    }
+    };
 
     useEffect(() => {
         if (!chatId) return;
@@ -440,7 +471,12 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                 (payload) => {
                     console.log("Realtime event:", payload.eventType, payload);
                     if (payload.eventType === "INSERT") {
-                        const newMessage = payload.new as DirectMessages;
+                        const newMessage = {
+                            ...payload.new,
+                            created_at: payload.new.created_at ?? new Date().toISOString(),
+                            attachments: [],
+                        } as unknown as DirectMessages;
+
                         setDirectMessages((prev) => {
                             if (prev.find((m) => m.id === newMessage.id)) return prev;
                             return [...prev, newMessage];
@@ -450,7 +486,11 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                     if (payload.eventType === "UPDATE") {
                         const updatedMessage = payload.new as DirectMessages;
                         setDirectMessages((prev) =>
-                            prev.map((m) => (m.id === updatedMessage.id ? updatedMessage : m))
+                            prev.map((m) =>
+                                m.id === updatedMessage.id
+                                    ? { ...updatedMessage, attachments: m.attachments } // ✅ same fix
+                                    : m
+                            )
                         );
                     }
 
@@ -488,7 +528,6 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
 
         if (selectedServer.id != 'Me' && selectedChannel) {
             const senderIds = [...new Set(messages.map(m => m.sender))];
-
             if (!senderIds.length) return;
             const { data, error } = await supabase
                 .from("users")
@@ -642,26 +681,37 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
     };
 
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
 
-        setLoading(true); // start spinner
+        const fileArray = Array.from(files);
+
+        if (preview.length + fileArray.length > 10) {
+            alert("You can only upload up to 10 images per message.");
+            return;
+        }
+
+        setLoading(true);
         try {
-            const { url, deleteUrl } = await uploadToImgBB(file);
-            setPreview(prev => [...prev, url]);
+            const uploadPromises = fileArray.map(file => uploadToImgBB(file));
+            const results = await Promise.all(uploadPromises);
+            const urls = results.map(res => res.url);
+
+            setPreview(prev => [...prev, ...urls]);
         } catch (err) {
-            console.error(err);
+            alert(err);
         } finally {
-            setLoading(false); // stop spinner regardless of success/failure
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            setLoading(false);
         }
     };
 
     const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     const openFilePicker = () => {
-        if (preview.length >= 4) {
-            return alert("You can only upload up to 4 images per message.");
-        }
+        // if (preview.length >= 4) {
+        //     return alert("You can only upload up to 4 images per message.");
+        // }
         if (fileInputRef.current) {
             fileInputRef.current.click();
         }
@@ -669,6 +719,8 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
 
     return (
         <div className="flex flex-1 flex-col text-white pb-2 w-full h-full">
+            {/* image message preview full screen */}
+            {/* <div className="absolute bg-amber-200 w-full h-full z-999"></div> */}
             {/* header */}
             <div className="h-12 flex items-center p-3 w-full border-b border-[#303034] place-content-between">
                 {selectedServer.id != 'Me' && (<div className="flex gap-3">
@@ -703,25 +755,25 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                 {(selectedServer.id != 'Me' || selectedFriend) && (<div className="flex flex-col w-full h-full">
 
                     {/* Messages Area */}
-                    {(selectedServer.id != 'Me' && selectedChannel) && (<div ref={bottomRef} className="flex-1 min-h-0 py-2 flex flex-col-reverse gap-5 overflow-y-auto scrollbar-minimal">
+                    {(selectedServer.id != 'Me' && selectedChannel) && (<div ref={bottomRef} className="flex-1 min-h-0 py-2 flex flex-col-reverse gap-5 overflow-y-auto scrollbar-minimal overflow-hidden ">
 
                         {[...messages].reverse().map((message) => {
                             const muser = users.find(u => u.id === message.sender);
                             console.table(message)
                             return (
                                 <div key={message.id} className="hover:bg-[#242428] p-2 flex gap-3 relative group">
-                                    <div className="hidden absolute w-auto h-8 bg-[#242428] group-hover:flex cursor-pointer rounded-md -top-4 right-10 border border-[#303034] items-center justify-end px-1 py-0.5 gap-1 hover:shadow-xl/20">
-                                        {message.sender === user?.id && (<div onClick={() => { setEditingMessageId(message.id); setEditedMessage(message.message) }} className="text-white/50 hover:text-white hover:bg-[#303034] w-8 h-full flex items-center justify-center rounded-sm">
+                                    {(message.message || message.sender === user?.id) && (<div className="hidden absolute w-auto h-8 bg-[#242428] group-hover:flex cursor-pointer rounded-md -top-4 right-10 border border-[#303034] items-center justify-end px-1 py-0.5 gap-1 hover:shadow-xl/20">
+                                        {message.sender === user?.id && (<div onClick={() => { setEditingMessageId(message.id); setEditedMessage(message.message); setEditingMessageId(editingMessageId == message.id ? null : message.id); }} className="text-white/50 hover:text-white hover:bg-[#303034] w-8 h-full flex items-center justify-center rounded-sm">
                                             <IconPencilFilled size={20} />
                                         </div>)}
-                                        <div onClick={() => { copyText(message.message) }} className="text-white/50 hover:text-white hover:bg-[#303034] w-8 h-full flex items-center justify-center rounded-sm">
+                                        {message.message && (<div onClick={() => { copyText(message.message) }} className="text-white/50 hover:text-white hover:bg-[#303034] w-8 h-full flex items-center justify-center rounded-sm">
                                             <IconCopyFilled size={20} />
-                                        </div>
+                                        </div>)}
                                         {message.sender === user?.id && (<div onClick={() => { handleDeleteMessage(message.id) }} className="text-red-500 hover:bg-[#303034] w-8 h-full flex items-center justify-center rounded-sm">
                                             <IconTrashFilled size={20} />
                                         </div>)}
-                                    </div>
-                                    <div className="w-10 h-10 rounded-full overflow-hidden">
+                                    </div>)}
+                                    <div className="min-w-10 max-w-10 h-10 rounded-full overflow-hidden">
                                         <img src={muser?.profile} className="h-full w-full object-cover" />
                                     </div>
 
@@ -730,9 +782,9 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                                             <span className="text-sm font-semibold">{muser?.username}</span>
                                             <span className="text-xs text-white/50">{format(new Date(message.created_at), "hh:mm a")}</span>
                                         </div>
-                                        {editingMessageId !== message.id && message.message.trim() !== '' && (<span className="text-white">{message.message}</span>)}
+                                        {editingMessageId !== message.id && message.message?.trim() !== '' && (<span className="text-white wrap-break-word whitespace-pre-wrap pr-6">{message.message}</span>)}
                                         {message.attachments?.length > 0 && (
-                                            <div className="flex gap-2 mt-1">
+                                            <div className="flex gap-2 mt-1 overflow-x-scroll scrollbar-minimal pb-4">
                                                 {message.attachments.map((attachment) => (
                                                     <div key={attachment.id} className="relative">
                                                         {attachment.fileType === 'image' && (
@@ -742,8 +794,8 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                                                                     className="w-full h-full object-cover"
                                                                     onClick={() => window.open(attachment.fileUrl, "_blank")}
                                                                 />
-                                                                {message.attachments.length > 1 && (
-                                                                    <div onClick={() => handleDeleteAttachment(attachment.id)} className="absolute top-2 right-2 cursor-pointer text-red-500 hover:bg-black bg-[#222327] border border-[#303034] w-8 h-8 hidden group-hover/img:flex items-center justify-center rounded-sm">
+                                                                {message.attachments.length > 1 && editingMessageId === message.id && (
+                                                                    <div onClick={() => handleDeleteAttachment(attachment.id, message.id)} className="absolute top-2 right-2 cursor-pointer text-red-500 hover:bg-black bg-[#222327] border border-[#303034] w-8 h-8 hidden group-hover/img:flex items-center justify-center rounded-sm">
                                                                         <IconTrashFilled size={20} />
                                                                     </div>
                                                                 )}
@@ -755,7 +807,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                                         )}
                                         {editingMessageId === message.id && (<form onSubmit={(e) => { setEditingMessageId(null); handleEditedMessage(e, message.id, editedMessage); }} className="w-full my-2">
                                             <div className="flex w-full h-13 px-5 py-0.5 items-center justify-end border border-[#303034] rounded-md gap-1">
-                                                <input type="text" value={editedMessage} onChange={(e) => setEditedMessage(e.target.value)} className="w-full h-full focus:outline-0 font-thin text-white/60" />
+                                                <input type="text" value={editedMessage} onChange={(e) => setEditedMessage(e.target.value)} className="w-full h-full focus:outline-0 font-thin text-white/60" placeholder="edit message" />
                                             </div>
                                             <div className="flex gap-1">
                                                 <span className="text-xs py-1">escape to</span>
@@ -817,11 +869,14 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
 
                     </div>)}
 
-                    <div className="px-3 w-full min-h-15 h-auto items-center">
+
+                    {/* Message Input Area */}
+
+                    <div className="px-3 w-full min-h-15 h-auto items-center mt-4">
                         {((selectedServer.id == 'Me' && selectedFriend) || (selectedServer.id != 'Me' && selectedChannel)) && (<div className="flex flex-col px-3 gap-5 items-start justify-center rounded-md border border-[#303034] bg-[#222327] w-full h-full overflow-hidden">
                             {/* add Files */}
-                            {(preview.length > 0 || loading) && (<div className="flex gap-2 items-center pt-4 overflow-x-auto">
-                                {preview.map((url, index) => (<div key={index} className="relative rounded-md overflow-hidden w-42 h-30 border border-[#303034] bg-[#17171a] flex items-center justify-center">
+                            {(preview.length > 0 || loading) && (<div className="flex gap-2 pt-4 pb-4 min-w-full max-w-full overflow-x-scroll scrollbar-minimal">
+                                {preview.map((url, index) => (<div key={index} className="relative rounded-md overflow-hidden min-w-42 max-w-42 min-h-30 max-h-30 border border-[#303034] bg-[#17171a] flex items-center justify-center">
                                     <img src={url} alt="" className="w-full h-full object-cover" />
                                     {loading && (
                                         <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -839,6 +894,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                                     ref={fileInputRef}
                                     className="hidden"
                                     accept="image/*"
+                                    multiple
                                     onChange={handleFileChange} />
                                 <div onClick={openFilePicker} className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer hover:bg-white/20 p-1 rounded-md">
                                     <IconPlus stroke={2} />
@@ -955,7 +1011,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                 </div>)}
 
                 {/* Show Users */}
-                {showUsers && selectedServer.id != 'Me' && (<div className="flex flex-col gap-3 h-full w-[20vw] min-w-60 border-l border-[#303034] px-3 py-5">
+                {showUsers && selectedServer.id != 'Me' && (<div className="flex flex-col gap-3 h-full min-w-[20vw] border-l border-[#303034] px-3 py-5">
                     {/* users template */}
                     <span className="text-white/50">Server users:</span>
 
@@ -964,7 +1020,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                             <div onClick={(e) => { setSelectedProfileCard(su.id); selectedProfileCard === su.id ? setShowProfileCard(!showProfileCard) : setShowProfileCard(true); handleClick(e, su.id) }} key={su.id} className={`flex relative items-center gap-3 group px-2 py-1 rounded-md cursor-pointer ${(selectedProfileCard === su.id && showProfileCard) ? 'bg-[#333338] text-white' : 'text-white/50 hover:bg-white/5'}`}>
                                 {/* Profile Card */}
                                 {selectedProfileCard === su.id && showProfileCard && (
-                                    <div className={`cursor-default flex flex-col items-start absolute right-80 bg-[#242429] w-80 h-auto rounded-xl overflow-hidden shadow-xl ${position === "top" ? "bottom-0" : "top-0"}`}>
+                                    <div onClick={(e) => e.stopPropagation()} className={`cursor-default flex flex-col items-start absolute right-80 bg-[#242429] w-80 h-auto rounded-xl overflow-hidden shadow-xl ${position === "top" ? "bottom-0" : "top-0"}`}>
                                         {/* Banner */}
                                         <div className="w-full min-h-30 relative flex" style={{ backgroundColor: su?.banner }}>
                                             {selectedProfileCard !== user?.id && (<div className="absolute flex gap-2 right-2 top-2">

@@ -37,6 +37,7 @@ body {
 
 .scrollbar-minimal::-webkit-scrollbar {
   width: 4px;
+  height: 8px;
 }
 
 .scrollbar-minimal::-webkit-scrollbar-thumb {
