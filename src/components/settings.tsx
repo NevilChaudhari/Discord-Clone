@@ -1,7 +1,7 @@
 "use client";
 
 import { signOut } from "@/services/auth";
-import { IconAccessibleFilled, IconAppsFilled, IconBellFilled, IconChevronRightFilled, IconCoinRupeeFilled, IconConfettiFilled, IconCreditCardFilled, IconDeviceDesktopFilled, IconDiamondsFilled, IconGiftFilled, IconKeyboardFilled, IconLinkFilled, IconMeteorFilled, IconMicrophoneFilled, IconPaletteFilled, IconPencilFilled, IconSearch, IconShieldCheckFilled, IconShieldLockFilled, IconStarFilled, IconUserFilled, IconWorldFilled, IconXFilled } from "@tabler/icons-react";
+import { IconAccessibleFilled, IconAppsFilled, IconBellFilled, IconCaretLeftFilled, IconChevronRightFilled, IconCoinRupeeFilled, IconConfettiFilled, IconCreditCardFilled, IconDeviceDesktopFilled, IconDiamondsFilled, IconGiftFilled, IconKeyboardFilled, IconLinkFilled, IconMeteorFilled, IconMicrophoneFilled, IconPaletteFilled, IconPencilFilled, IconSearch, IconShieldCheckFilled, IconShieldLockFilled, IconStarFilled, IconUserFilled, IconWorldFilled, IconXFilled } from "@tabler/icons-react";
 import { useRouter } from "next/navigation";
 import { MouseEventHandler, useState } from "react";
 import WIP from "./wip";
@@ -67,7 +67,7 @@ export default function SettingsUi({ user, close, save, defaultTab = 'My Account
     const router = useRouter();
 
     const [search, setSearch] = useState('');
-    const [openedTab, setOpenedTab] = useState(defaultTab);
+    const [openedTab, setOpenedTab] = useState('');
 
     const handleLogout = async () => {
         await signOut();
@@ -77,9 +77,14 @@ export default function SettingsUi({ user, close, save, defaultTab = 'My Account
     return (
         <div className="flex items-center justify-center w-full h-full bg-black/50">
             {/* Main Area */}
-            <div className="flex w-350 h-200 rounded-xl border border-[#303034] overflow-hidden">
+            <div className="flex md:w-350 md:h-200 w-full h-full md:rounded-xl border border-[#303034] overflow-hidden">
                 {/* Left Area */}
-                <div className="flex bg-[#1a1a1e] h-full w-[21%] flex-col">
+                <div className={`md:flex bg-[#1a1a1e] h-full w-full md:w-[21%] flex-col ${openedTab ? 'hidden' : 'block'}`}>
+                    <div className="md:hidden flex w-full p-2 place-content-end">
+                        <div className="flex cursor-pointer h-7 items-end" onClick={close}>
+                            <IconXFilled size={20} color="gray" />
+                        </div>
+                    </div>
                     <div className="flex flex-col p-4 gap-2">
                         {/* Profile tab */}
                         <div onClick={() => { setOpenedTab('Profile') }} className={`${openedTab === 'Profile' ? 'bg-[#2e2e33] text-white' : 'hover:bg-[#1f1f23] text-white/50 hover:text-white'} flex items-center gap-3 group h-15 w-full rounded-md cursor-pointer px-2 py-2`}>
@@ -155,10 +160,11 @@ export default function SettingsUi({ user, close, save, defaultTab = 'My Account
                     </div>
                 </div>
                 {/* Right Area */}
-                <div className="flex flex-col bg-[#202024] h-full w-full">
+                <div className={`md:flex flex-col bg-[#202024] h-full w-full ${openedTab ? 'block' : 'hidden'}`}>
                     <div className="flex w-full min-h-12 items-center border-b border-[#303034] px-5 place-content-between">
+                        <div className="flex hover:text-white cursor-pointer" onClick={() => setOpenedTab('')}><IconCaretLeftFilled color="gray"/></div>
                         <label>{openedTab}</label>
-                        <div onClick={close} className="flex items-center justify-center w-7 h-7 cursor-pointer hover:bg-[#323237] rounded-md"><IconXFilled size={20} /></div>
+                        <div onClick={close} className="flex items-center justify-center w-7 h-7 cursor-pointer hover:bg-[#323237] md:rounded-md"><IconXFilled size={20} /></div>
                     </div>
 
                     {openedTab === 'My Account' && (<MyAccount user={user} edit={() => setOpenedTab('Profile')} />)}

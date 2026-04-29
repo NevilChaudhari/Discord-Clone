@@ -51,7 +51,7 @@ export default function MyAccount({ user, edit }: Props) {
         // }
     }
     return (
-        <div className="flex flex-col gap-15 items-center h-full w-full text-center text-white/70 overflow-y-auto px-60 py-30 scrollbar-minimal">
+        <div className="flex flex-col gap-15 items-center h-full w-full text-center text-white/70 overflow-y-auto px-2 py-15 md:px-60 md:py-30 scrollbar-minimal">
             {/* Profile Card */}
             <div className="flex flex-col items-start relative bg-[#121214] w-full min-h-120 rounded-xl overflow-hidden">
                 {/* Banner */}
@@ -69,10 +69,11 @@ export default function MyAccount({ user, edit }: Props) {
                                 <label className="font-semibold text-xl text-white">{user?.username}</label>
                                 <label className="font-semibold text-xl text-white/50 hover:text-white/80 cursor-pointer"><IconDotsFilled /></label>
                             </div>
-                            <button onClick={edit} className="text-white hover:bg-[#4c5ad1] bg-[#5865f2] px-2 py-1 rounded-md h-8 text-sm cursor-pointer">Edit User profile</button>
+                            <button onClick={edit} className="text-white hover:bg-[#4c5ad1] bg-[#5865f2] px-2 py-1 rounded-md h-8 text-sm cursor-pointer hidden md:block">Edit User profile</button>
+                            <button onClick={edit} className="text-white hover:bg-[#4c5ad1] bg-[#5865f2] px-2 py-1 rounded-md h-8 text-sm cursor-pointer md:hidden">Edit Profile</button>
                         </div>
                     </div>
-                    <div className="flex flex-col gap-5 bg-[#1a1a1e] w-full h-full rounded-md p-5">
+                    <div className="text-sm md:text-base flex flex-col gap-5 bg-[#1a1a1e] w-full h-full rounded-md p-5">
                         {/* Username */}
                         <div className="flex items-center place-content-between">
                             <div className="flex flex-col items-start">

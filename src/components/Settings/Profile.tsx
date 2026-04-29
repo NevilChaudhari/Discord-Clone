@@ -98,9 +98,9 @@ export default function Profile({ user, edit, save }: Props) {
 
     return (
         <>
-            <div className="flex items-center gap-5 h-full w-full text-center relative text-white/70 px-60 overflow-y-auto scrollbar-minimal py-30">
+            <div className="flex md:flex-row flex-col items-center gap-5 h-full w-full text-center relative text-white/70 overflow-y-auto scrollbar-minimal px-5 py-15 md:px-60 md:py-30">
                 {/* Left Side */}
-                <div className="flex flex-col gap-5 text-start min-w-[50%] h-full">
+                <div className="flex flex-col gap-5 text-start w-full md:min-w-[50%] h-full order-2 md:order-1">
                     {/* Username */}
                     <div className="flex flex-col gap-1">
                         <label className="text-white">Username</label>
@@ -187,7 +187,7 @@ export default function Profile({ user, edit, save }: Props) {
                 </div>
 
                 {/* Right Side */}
-                <div className="flex flex-col gap-10 h-auto text-start w-[50%] sticky top-0">
+                <div className="flex flex-col gap-10 h-auto w-full text-start w-[50%] md:sticky top-0 order-1 md:order-2">
                     {/* Profile card preview */}
                     <div className="flex flex-col w-full gap-1">
                         <label className="text-white">Preview</label>
@@ -228,8 +228,9 @@ export default function Profile({ user, edit, save }: Props) {
                         </div>
                     </div>
                 </div>
+
                 {/* save UI */}
-                {saveUI && (<div className="flex fixed bottom-20 left-1/2 -translate-x-1/2 bg-[#2c2d32] p-2 rounded-md min-w-[60%] place-content-between items-center shadow-xl">
+                {saveUI && (<div className="flex fixed bottom-20 left-1/2 -translate-x-1/2 bg-[#2c2d32] p-2 rounded-md w-full px-5 md:px-0 md:min-w-[60%] place-content-between items-center shadow-xl">
                     <label className="text-white text-sm font-semibold">Careful — you have unsaved changes!</label>
                     <div className="flex">
                         <button className="text-[#98afff] hover:text-[#6c79b6] py-2 px-4 rounded-md cursor-pointer hover:underline" onClick={handleReset}>
