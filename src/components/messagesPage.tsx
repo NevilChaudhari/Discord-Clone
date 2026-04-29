@@ -1,7 +1,7 @@
 "use client";
 
 import { supabase } from "@/lib/supabase";
-import { IconBellFilled, IconCheckFilled, IconCopyFilled, IconDotsFilled, IconGif, IconGift, IconHash, IconMoodHappy, IconPencilFilled, IconPinFilled, IconPlus, IconPlusFilled, IconSticker2, IconTrashFilled, IconUser, IconUserFilled, IconXFilled } from "@tabler/icons-react";
+import { IconBellFilled, IconCheckFilled, IconCopyFilled, IconDotsFilled, IconDotsVerticalFilled, IconGif, IconGift, IconHash, IconMenu2Filled, IconMessageCircleFilled, IconMoodHappy, IconPencilFilled, IconPinFilled, IconPlus, IconPlusFilled, IconSticker2, IconTrashFilled, IconUser, IconUserFilled, IconXFilled, IconZoom } from "@tabler/icons-react";
 import { format, set } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 import WIP from "./wip";
@@ -16,6 +16,7 @@ interface user {
     profile: string;
     banner: string;
     bio: string;
+    created_at: string;
 }
 
 interface friend {
@@ -24,15 +25,18 @@ interface friend {
     username: string;
     refcode: string;
     profile: string;
-    // chatId: string;
+    chatId: string;
+    status: string;
     friend?: user;
 }
 
 type Attachment = {
     id: number;
-    messageId: number;
+    messageId: number | null;
+    chatMessageId: number | null;
     fileUrl: string;
     fileType: string;
+    server: boolean;
 }
 
 interface Messages {
@@ -65,9 +69,12 @@ type UserCardProps = {
     user?: user;
     selectedServer: Server;
     selectedFriend: friend;
+    setSelectedFriend: (friend: friend) => void;
+    toggleServers: boolean;
+    setToggleServers: (value: boolean) => void;
 };
 
-export default function MessagesPage({ selectedChannel, selectedChannelId, user, selectedServer, selectedFriend }: UserCardProps) {
+export default function MessagesPage({ selectedChannel, selectedChannelId, user, selectedServer, selectedFriend, setSelectedFriend, toggleServers, setToggleServers }: UserCardProps) {
     const [message, setMessage] = useState('')
     const [messages, setMessages] = useState<Messages[]>([]);
     const [directMessages, setDirectMessages] = useState<DirectMessages[]>([]);
@@ -75,7 +82,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
     const [showUsers, setShowUsers] = useState(false);
     const [serverUsers, setServerUsers] = useState<user[]>([]);
     const [searchFriend, setSearchFriend] = useState('');
-    const [friendsUI, setFriendsUI] = useState('pending');
+    const [friendsUI, setFriendsUI] = useState('all');
     const [searchFriendResult, setSearchFriendResult] = useState<user[]>([]);
     const [pendingRequest, setPendingRequest] = useState<friend[]>([]);
     const [receivedRequest, setReceivedRequest] = useState<friend[]>([]);
@@ -88,6 +95,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
     const [editedMessage, setEditedMessage] = useState('');
     const [loading, setLoading] = useState(false);
     const [preview, setPreview] = useState([] as string[]);
+    const [friends, setFriends] = useState<friend[]>([]);
 
     const handleClick = (
         e: React.MouseEvent<HTMLDivElement>,
@@ -106,6 +114,47 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
         }
 
         setSelectedProfileCard(id);
+    };
+
+    useEffect(() => {
+        setDirectMessages([]);
+    }, [selectedFriend])
+    
+    useEffect(() => {
+        handleFriends();
+    }, [user])
+
+    const handleFriends = async () => {
+        console.log("USER:", user);
+
+        if (!user?.id) return;
+
+        const { data, error } = await supabase
+            .from("friends")
+            .select(`
+            status,
+            userId,
+            friendId,
+            user:users!friends_userId_fkey (*),
+            friend:users!friends_friendId_fkey (*)
+        `)
+            .or(`userId.eq.${user.id},friendId.eq.${user.id}`)
+            .eq('status', 'accepted');
+
+        console.log("ERROR:", error);
+
+        if (error) return;
+
+        const formatted = data
+            ?.map((row) => {
+                const other =
+                    row.userId === user.id ? row.friend : row.user;
+
+                return Array.isArray(other) ? other[0] : other;
+            })
+            .filter(Boolean);
+
+        setFriends(formatted ?? []);
     };
 
     useEffect(() => {
@@ -174,7 +223,6 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                 },
                 (payload) => {
                     console.log("Realtime event:", payload.eventType, payload);
-                    // ❌ newMessage from realtime has no attachments field
                     if (payload.eventType === "INSERT") {
                         const newMessage = payload.new as Messages;
                         setMessages((prev) => {
@@ -210,87 +258,61 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
     }, [selectedChannelId]);
 
     useEffect(() => {
-        if (!selectedChannelId) return;
+        if (!chatId) return;
 
-        const attachmentsChannel = supabase
-            .channel(`attachments-${selectedChannelId}`)
-            .on(
-                "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "attachments",
-                },
-                async (payload) => {
-                    console.log("Realtime event:", payload.eventType, payload);
+        const dmAttachmentsChannel = supabase
+            .channel(`dm-attachments-${chatId}`)
+            .on("postgres_changes", { event: "*", schema: "public", table: "attachments" },
+                (payload) => {
                     if (payload.eventType === "INSERT") {
-                        const newAttachment = payload.new as Attachment; // ✅ correct type
-                        setMessages((prev) =>
-                            prev.map((m) =>
-                                m.id === newAttachment.messageId
-                                    ? { ...m, attachments: [...(m.attachments || []), newAttachment] }
-                                    : m
-                            )
-                        );
-                    }
+                        const a = payload.new as Attachment;
+                        if (!a.chatMessageId) return;
 
-                    if (payload.eventType === "UPDATE") {
-                        const updatedAttachment = payload.new as Attachment;
-                        setMessages((prev) =>
-                            prev.map((m) =>
-                                m.id === updatedAttachment.messageId
-                                    ? {
-                                        ...m,
-                                        attachments: m.attachments.map((a) =>
-                                            a.id === updatedAttachment.id ? updatedAttachment : a
-                                        ),
-                                    }
-                                    : m
-                            )
-                        );
+                        setDirectMessages(prev => {
+                            const messageExists = prev.some(m => m.id === a.chatMessageId);
+
+                            if (messageExists) {
+                                return prev.map(m =>
+                                    m.id === a.chatMessageId
+                                        ? { ...m, attachments: [...(m.attachments || []), a] }
+                                        : m
+                                );
+                            } else {
+                                supabase
+                                    .from("directMessage")
+                                    .select("*")
+                                    .eq("id", a.chatMessageId)
+                                    .single()
+                                    .then(({ data }) => {
+                                        if (!data) return;
+                                        setDirectMessages(prev2 => {
+                                            if (prev2.some(m => m.id === data.id)) return prev2;
+                                            return [...prev2, { ...data, attachments: [a] }];
+                                        });
+                                    });
+                                return prev; // return unchanged for now
+                            }
+                        });
                     }
 
                     if (payload.eventType === "DELETE") {
-                        const deletedAttachment = payload.old as { id: number; messageId: number };
-                        setMessages((prev) =>
-                            prev.map((m) =>
-                                m.id === deletedAttachment.messageId
-                                    ? {
-                                        ...m,
-                                        attachments: m.attachments.filter((a) => a.id !== deletedAttachment.id),
-                                    }
+                        const a = payload.old as { id: number; chatMessageId: number };
+                        if (!a.chatMessageId) return;
+                        setDirectMessages(prev =>
+                            prev.map(m =>
+                                m.id === a.chatMessageId
+                                    ? { ...m, attachments: m.attachments.filter(att => att.id !== a.id) }
                                     : m
                             )
                         );
                     }
                 }
-            )
-            .subscribe();
+            ).subscribe();
 
         return () => {
-            supabase.removeChannel(attachmentsChannel);
+            supabase.removeChannel(dmAttachmentsChannel);
         };
-    }, [selectedChannelId]);
-
-    // DM's
-
-    // useEffect(() => {
-    //     const fetchMessages = async () => {
-    //         if (!user) {
-    //             return;
-    //         }
-    //         const { data } = await supabase
-    //             .from("directMessage")
-    //             .select("*")
-    //             .or(`senderId.eq.${user.id},receiverId.eq.${user.id}`)
-    //             .order("created_at");
-
-    //         setDirectMessages(data || []);
-    //     };
-
-    //     fetchMessages();
-    // }, [selectedFriend]);
-
+    }, [chatId]);
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -325,13 +347,13 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                     .insert(
                         files.map((url) => ({
                             fileUrl: url,
-                            messageId: messageData?.id,
+                            chatMessageId: messageData?.id,
                             fileType: 'image',
                             server: false,
                         }))
                     );
                 if (attachmentError) {
-                    alert(attachmentError.message);
+                    alert(JSON.stringify(attachmentError));
                 }
             }
         }
@@ -349,7 +371,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                             fileUrl: url,
                             messageId: messageData?.id,
                             fileType: 'image',
-                            server: true,
+                            server: false,
                         }))
                     );
                 if (attachmentError) {
@@ -400,31 +422,26 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
     }
 
     const handleDeleteAttachment = async (id: number, messageId: number) => {
-        // ✅ update UI immediately
-        setMessages((prev) =>
-            prev.map((m) =>
-                m.id === messageId
-                    ? { ...m, attachments: m.attachments.filter((a) => a.id !== id) }
-                    : m
-            )
-        );
-
-        const { error } = await supabase.from('attachments').delete().eq('id', id);
-        if (error) {
-            alert(error.message);
-            // ✅ rollback if delete failed — refetch attachments for that message
-            const { data } = await supabase
-                .from('attachments')
-                .select('*')
-                .eq('messageId', messageId);
-            setMessages((prev) =>
-                prev.map((m) =>
+        if (selectedServer.id === 'Me') {
+            setDirectMessages(prev =>
+                prev.map(m =>
                     m.id === messageId
-                        ? { ...m, attachments: data || [] }
+                        ? { ...m, attachments: m.attachments.filter(a => a.id !== id) }
+                        : m
+                )
+            );
+        } else {
+            setMessages(prev =>
+                prev.map(m =>
+                    m.id === messageId
+                        ? { ...m, attachments: m.attachments.filter(a => a.id !== id) }
                         : m
                 )
             );
         }
+
+        const { error } = await supabase.from('attachments').delete().eq('id', id);
+        if (error) alert(error.message);
     };
 
     useEffect(() => {
@@ -434,25 +451,27 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
         const fetchMessages = async () => {
             const { data, error } = await supabase
                 .from("directMessage")
-                .select(`
-                    *,
-                    attachments (
-                        id,
-                        fileUrl,
-                        messageId,
-                        fileType,
-                        server
-                    )
-                `)
+                .select("*")
                 .eq("chatId", chatId)
                 .order("created_at", { ascending: true });
 
-            if (error) {
-                console.error("Fetch error:", JSON.stringify(error));
-                return;
-            }
+            if (error) { console.error("Fetch error:", JSON.stringify(error)); return; }
 
-            setDirectMessages(data || []);
+            const messages = data || [];
+            if (!messages.length) { setDirectMessages([]); return; }
+
+            const messageIds = messages.map(m => m.id);
+            const { data: attachments } = await supabase
+                .from("attachments")
+                .select("*")
+                .in("chatMessageId", messageIds);
+
+            const merged = messages.map(m => ({
+                ...m,
+                attachments: attachments?.filter(a => a.chatMessageId === m.id) || []
+            }));
+
+            setDirectMessages(merged);
         };
 
         fetchMessages();
@@ -723,14 +742,16 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
             {/* <div className="absolute bg-amber-200 w-full h-full z-999"></div> */}
             {/* header */}
             <div className="h-12 flex items-center p-3 w-full border-b border-[#303034] place-content-between">
-                {selectedServer.id != 'Me' && (<div className="flex gap-3">
+                {selectedServer.id != 'Me' && (<div className="flex gap-3 items-center">
+                    <button onClick={() => { setToggleServers(!toggleServers) }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md md:hidden`}><IconMenu2Filled size={20}/></button>
                     <div className="w-6 h-6 overflow-hidden rounded-full">
                         <IconHash stroke={2} size={20} color="gray" />
                     </div>
                     {selectedChannel}
                 </div>)}
 
-                {selectedServer.id == 'Me' && selectedFriend && (<div className="flex gap-3">
+                {selectedServer.id == 'Me' && selectedFriend && (<div className="flex gap-3 items-center">
+                    <button onClick={() => { setToggleServers(!toggleServers) }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md md:hidden`}><IconMenu2Filled size={20}/></button>
                     <div className="w-6 h-6 overflow-hidden rounded-full">
                         <img src={selectedFriend.profile} alt="" className="w-full h-full object-cover" />
                     </div>
@@ -744,6 +765,8 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                     <IconUserFilled size={20} className="text-white/50 hover:text-white cursor-pointer" onClick={() => { getServerUsers(); setShowUsers(!showUsers) }} />
                 </div>)}
                 {selectedServer.id == 'Me' && !selectedFriend && (<div className="flex gap-5 py-1">
+                    <button onClick={() => { setToggleServers(!toggleServers) }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md md:hidden`}><IconMenu2Filled size={20}/></button>
+                    <button onClick={() => { setFriendsUI('all'); }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md ${friendsUI == 'all' ? 'bg-white/10' : 'bg-transparent'}`}>All</button>
                     <button onClick={() => { setFriendsUI('pending'); handlePendingRequest(); }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md ${friendsUI == 'pending' ? 'bg-white/10' : 'bg-transparent'}`}>Pending</button>
                     <button onClick={() => { setFriendsUI('add') }} className={`cursor-pointer px-2 py-1 hover:bg-[#5865f2]/30 rounded-md ${friendsUI == 'add' ? 'bg-[#5865f2]/50' : 'bg-[#5865f2]'}`}>Add Friend</button>
                 </div>)}
@@ -752,7 +775,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
             <div className="flex w-full h-full overflow-hidden">
 
                 {/* Left Side */}
-                {(selectedServer.id != 'Me' || selectedFriend) && (<div className="flex flex-col w-full h-full">
+                {(selectedServer.id != 'Me' || selectedFriend) && (<div className="flex flex-col w-full h-full min-w-0 overflow-hidden">
 
                     {/* Messages Area */}
                     {(selectedServer.id != 'Me' && selectedChannel) && (<div ref={bottomRef} className="flex-1 min-h-0 py-2 flex flex-col-reverse gap-5 overflow-y-auto scrollbar-minimal overflow-hidden ">
@@ -761,7 +784,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                             const muser = users.find(u => u.id === message.sender);
                             console.table(message)
                             return (
-                                <div key={message.id} className="hover:bg-[#242428] p-2 flex gap-3 relative group">
+                                <div key={message.id} className="hover:bg-[#242428] p-2 flex gap-3 relative group min-w-0">
                                     {(message.message || message.sender === user?.id) && (<div className="hidden absolute w-auto h-8 bg-[#242428] group-hover:flex cursor-pointer rounded-md -top-4 right-10 border border-[#303034] items-center justify-end px-1 py-0.5 gap-1 hover:shadow-xl/20">
                                         {message.sender === user?.id && (<div onClick={() => { setEditingMessageId(message.id); setEditedMessage(message.message); setEditingMessageId(editingMessageId == message.id ? null : message.id); }} className="text-white/50 hover:text-white hover:bg-[#303034] w-8 h-full flex items-center justify-center rounded-sm">
                                             <IconPencilFilled size={20} />
@@ -777,14 +800,14 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                                         <img src={muser?.profile} className="h-full w-full object-cover" />
                                     </div>
 
-                                    <div className="flex flex-col w-full pr-5">
+                                    <div className="flex flex-col w-full pr-5 min-w-0">
                                         <div className="flex gap-3">
                                             <span className="text-sm font-semibold">{muser?.username}</span>
                                             <span className="text-xs text-white/50">{format(new Date(message.created_at), "hh:mm a")}</span>
                                         </div>
                                         {editingMessageId !== message.id && message.message?.trim() !== '' && (<span className="text-white wrap-break-word whitespace-pre-wrap pr-6">{message.message}</span>)}
                                         {message.attachments?.length > 0 && (
-                                            <div className="flex gap-2 mt-1 overflow-x-scroll scrollbar-minimal pb-4">
+                                            <div className="flex gap-2 mt-1 overflow-x-scroll scrollbar-minimal pb-4 max-w-full">
                                                 {message.attachments.map((attachment) => (
                                                     <div key={attachment.id} className="relative">
                                                         {attachment.fileType === 'image' && (
@@ -850,6 +873,28 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                                             <span className="text-sm font-semibold">{muser?.username}</span>
                                             <span className="text-xs text-white/50">{format(new Date(message.created_at), "hh:mm a")}</span>
                                         </div>
+                                        {message.attachments?.length > 0 && (
+                                            <div className="flex gap-2 mt-1 overflow-x-scroll scrollbar-minimal pb-4 max-w-full">
+                                                {message.attachments.map((attachment) => (
+                                                    <div key={attachment.id} className="relative">
+                                                        {attachment.fileType === 'image' && (
+                                                            <div className="flex w-50 h-50 rounded-md overflow-hidden border border-[#303034] bg-[#17171a] relative group/img cursor-pointer">
+                                                                <img
+                                                                    src={attachment.fileUrl}
+                                                                    className="w-full h-full object-cover"
+                                                                    onClick={() => window.open(attachment.fileUrl, "_blank")}
+                                                                />
+                                                                {message.attachments.length > 1 && editingMessageId === message.id && (
+                                                                    <div onClick={() => handleDeleteAttachment(attachment.id, message.id)} className="absolute top-2 right-2 cursor-pointer text-red-500 hover:bg-black bg-[#222327] border border-[#303034] w-8 h-8 hidden group-hover/img:flex items-center justify-center rounded-sm">
+                                                                        <IconTrashFilled size={20} />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                         {editingMessageId !== message.id && (<span className="text-white">{message.message}</span>)}
                                         {editingMessageId === message.id && (<form onSubmit={(e) => { setEditingMessageId(null); handleEditedMessage(e, message.id, editedMessage); }} className="w-full my-2">
                                             <div className="flex w-full h-13 px-5 py-0.5 items-center justify-end border border-[#303034] rounded-md gap-1">
@@ -906,10 +951,10 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                                 </form>
                                 {/* Extra Options */}
                                 <div className="flex gap-2">
-                                    <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
+                                    <div className="hidden md:flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
                                         <IconGift stroke={2} />
                                     </div>
-                                    <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
+                                    <div className="hidden md:flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
                                         <IconGif stroke={2} />
                                     </div>
                                     <div className="flex items-center justify-center text-white/50 hover:text-white cursor-pointer bg-white/10 hover:bg-white/20 p-1 rounded-md">
@@ -956,6 +1001,35 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                         </div>
                     </div>
                 </div>)}
+
+                {/* Friends List */}
+                {selectedServer.id == 'Me' && selectedFriend == null && friendsUI == 'all' && (
+                    <div className="flex flex-col w-full h-full px-5 py-4 gap-3">
+                        <div className="flex w-full h-12 border rounded-lg bg-[#17171a] border-[#303034] items-center justify-center px-2 gap-2">
+                            <IconZoom stroke={2} size={20} />
+                            <input type="text" className="w-full h-full focus:outline-0" placeholder="search (W.I.P.)" />
+                        </div>
+                        {friends.length > 0 && (<div className="flex flex-col gap-3 justify-center">
+                            {/* User Card */}
+                            {friends.map((friend) => {
+                                return (
+                                    <div onClick={() => setSelectedFriend(friend)} className="flex border-t border-[#303034] py-2 px-2 items-center gap-3 place-content-between cursor-pointer hover:border-[#ffffff00] hover:rounded-md hover:bg-white/5">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full overflow-hidden">
+                                                <img src={friend?.profile} className="w-full h-full object-cover" />
+                                            </div>
+                                            <span>{friend?.username}</span>
+                                        </div>
+                                        <div className="flex">
+                                            <IconMessageCircleFilled />
+                                            <IconDotsVerticalFilled />
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>)}
+                    </div>
+                )}
 
                 {/* Pending Friend Request UI */}
                 {selectedServer.id == 'Me' && !selectedFriend && friendsUI == 'pending' && (<div className="flex flex-col w-full h-full">
@@ -1020,7 +1094,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                             <div onClick={(e) => { setSelectedProfileCard(su.id); selectedProfileCard === su.id ? setShowProfileCard(!showProfileCard) : setShowProfileCard(true); handleClick(e, su.id) }} key={su.id} className={`flex relative items-center gap-3 group px-2 py-1 rounded-md cursor-pointer ${(selectedProfileCard === su.id && showProfileCard) ? 'bg-[#333338] text-white' : 'text-white/50 hover:bg-white/5'}`}>
                                 {/* Profile Card */}
                                 {selectedProfileCard === su.id && showProfileCard && (
-                                    <div onClick={(e) => e.stopPropagation()} className={`cursor-default flex flex-col items-start absolute right-80 bg-[#242429] w-80 h-auto rounded-xl overflow-hidden shadow-xl ${position === "top" ? "bottom-0" : "top-0"}`}>
+                                    <div onClick={(e) => e.stopPropagation()} className={`z-2 cursor-default flex flex-col items-start absolute right-[20vw] bg-[#242429] w-80 h-auto rounded-xl overflow-hidden shadow-xl ${position === "top" ? "bottom-0" : "top-0"}`}>
                                         {/* Banner */}
                                         <div className="w-full min-h-30 relative flex" style={{ backgroundColor: su?.banner }}>
                                             {selectedProfileCard !== user?.id && (<div className="absolute flex gap-2 right-2 top-2">
@@ -1059,7 +1133,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                         )
                     })}
                 </div>)}
-                {selectedServer.id == 'Me' && (<div className="flex flex-col gap-3 h-full w-[20vw] min-w-60 border-l border-[#303034] px-3 py-5 md:hidden lg:flex">
+                {selectedServer.id == 'Me' && (<div className="md:flex flex-col gap-3 h-full w-[20vw] min-w-60 border-l border-[#303034] px-3 py-5 hidden lg:flex">
                     {/* users template */}
                     <span className="text-white/50"><WIP /></span>
                 </div>)}

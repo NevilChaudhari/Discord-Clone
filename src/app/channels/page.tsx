@@ -45,6 +45,7 @@ interface friend {
     profile: string;
     chatId: string;
     status: string;
+    friend?: user;
 }
 
 export default function ChannelsLayout() {
@@ -88,6 +89,7 @@ export default function ChannelsLayout() {
     const [serverOptions, setServerOptions] = useState(false);
     const [settingsUI, setSettingsUI] = useState(false);
     const [userCardUI, setUserCardUI] = useState(false);
+    const [toggleServers, setToggleServers] = useState(false);
 
 
     useEffect(() => {
@@ -391,7 +393,7 @@ export default function ChannelsLayout() {
         `)
             .or(`userId.eq.${user.id},friendId.eq.${user.id}`)
             .or(`status.eq.accepted,status.eq.none`)
-            // .eq("status", "accepted");
+        // .eq("status", "accepted");
 
         console.table(data);
         console.log("ERROR:", error);
@@ -414,6 +416,10 @@ export default function ChannelsLayout() {
         e.preventDefault();
         setServerOptions(!serverOptions)
     };
+
+    const handleOpenChat = (friend: friend) => {
+        setSelectedFriend(friend);
+    }
 
     return (
         <div className="bg-[#121214] w-screen h-dvh overflow-hidden flex flex-col relative">
@@ -613,7 +619,7 @@ export default function ChannelsLayout() {
                     <IconHelpFilled className="hover:text-white text-[#808080] cursor-pointer" />
                 </div>
                 {selectedServer.id == 'Me' && (<IconUserFilled color="gray" size={20} />)}
-                {selectedServer.icon && selectedServer.id != 'Me' && (<div className="flex w-7 h-7 overflow-hidden rounded-md mx-2">
+                {selectedServer.icon && selectedServer.id != 'Me' && (<div className="flex w-7 h-7 overflow-`hidden` rounded-md mx-2">
                     <img src={selectedServer?.icon} alt="" className="w-full h-full" />
                 </div>)}
                 {!selectedServer.icon && selectedServer.id != 'Me' && (<div className="w-8 h-8 overflow-hidden rounded-md bg-white/5 flex justify-center items-center font-semibold">
@@ -628,7 +634,7 @@ export default function ChannelsLayout() {
             {/* Body */}
             <div className="flex flex-1 overflow-hidden">
                 {/* Left Side */}
-                <div className="w-85 h-full flex flex-col">
+                <div className={`w-85 h-full md:flex flex-col ${toggleServers ? 'flex' : 'hidden'}`}>
                     <div className="w-full flex-1 min-h-0 flex relative">
                         {/* Servers/Friends List */}
                         <div className="w-15 flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto overflow-x-hidden hide-scrollbar">
@@ -715,7 +721,7 @@ export default function ChannelsLayout() {
                                 {/* Body(Friends) */}
                                 <div className="w-full h-full flex flex-col p-3">
                                     <div className="w-full h-auto flex flex-col border-b border-[#303034]">
-                                        <button onClick={() => { setSelectedFriend(null) }} className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconUserFilled /> Friends</button>
+                                        <button onClick={() => { setSelectedFriend(null); setToggleServers(!toggleServers) }} className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconUserFilled /> Friends</button>
                                         <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconMeteorFilled /> Nitro</button>
                                         <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconBasketFilled /> Shop</button>
                                         <button className="flex items-center gap-5 p-2 rounded-md hover:bg-white/10 cursor-pointer text-white/50 hover:text-white"><IconZoomQuestionFilled /> Quest</button>
@@ -732,7 +738,7 @@ export default function ChannelsLayout() {
                                         {friends.map((friend) => {
                                             console.table(friend);
                                             return (
-                                                <div onClick={() => { setSelectedFriend(friend) }} key={friend.id} className={`group flex items-center p-2 rounded-md cursor-pointer place-content-between ${selectedFriend?.id == friend.id ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-white/50 hover:text-white'}`}>
+                                                <div onClick={() => { setSelectedFriend(friend); setToggleServers(!toggleServers); }} key={friend.id} className={`group flex items-center p-2 rounded-md cursor-pointer place-content-between ${selectedFriend?.id == friend.id ? 'bg-white/10 text-white' : 'hover:bg-white/5 text-white/50 hover:text-white'}`}>
                                                     <div className="flex gap-3 items-center">
                                                         <div className="rounded-full overflow-hidden w-8 h-8">
                                                             <img src={friend.profile} alt="" className="w-full h-full object-center" />
@@ -778,6 +784,7 @@ export default function ChannelsLayout() {
                                                         onClick={() => {
                                                             setSelectedChannel(channel.name);
                                                             setSelectedChannelId(channel.id);
+                                                            setToggleServers(!toggleServers);
                                                         }}
                                                         className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer w-full hover:text-white ${selectedChannelId === channel.id ? 'bg-[#2c2c30] text-white' : 'text-white/50'
                                                             }`}
@@ -798,7 +805,7 @@ export default function ChannelsLayout() {
                                             .map(channel => (
                                                 <button
                                                     key={channel.id}
-                                                    onClick={() => setSelectedChannel('Voice Channel WIP')}
+                                                    onClick={() => {setSelectedChannel('Voice Channel WIP'); setToggleServers(!toggleServers)}}
                                                     className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer hover:text-white ${selectedChannel === channel.id ? 'bg-[#2c2c30] text-white' : 'text-white/50'
                                                         }`}
                                                 >
@@ -887,7 +894,7 @@ export default function ChannelsLayout() {
 
                 {/* Right Side */}
                 <div className="h-full w-full min-w-0 bg-[#1a1a1e] border-t border-[#303034] flex flex-col">
-                    <MessagesPage selectedChannel={selectedChannel ?? ""} selectedChannelId={selectedChannelId ?? ""} user={user!} selectedServer={selectedServer} selectedFriend={selectedFriend!} />
+                    <MessagesPage selectedChannel={selectedChannel ?? ""} selectedChannelId={selectedChannelId ?? ""} user={user!} selectedServer={selectedServer} selectedFriend={selectedFriend!} setSelectedFriend={handleOpenChat} toggleServers={toggleServers} setToggleServers={(value) => setToggleServers(value)} />
                 </div>
             </div>
         </div>
