@@ -22,7 +22,7 @@ interface Servers {
 interface Channels {
     id: string;
     name: string;
-    type: string;
+    categoryId: string;
     serverId: string;
 }
 
@@ -72,14 +72,18 @@ export default function ChannelsLayout() {
     const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
     const [servers, setServers] = useState<Servers[]>([]);
     const [channels, setChannels] = useState<Channels[]>([]);
+    const [categories, setCategories] = useState<Channels[]>([]);
     const [mute, setMute] = useState(true);
     const [deafen, setDeafen] = useState(false);
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [addChannelUI, setAddChannelUI] = useState(false);
+    const [addCategoryUI, setAddCategoryUI] = useState(false);
     const [addServerMenu, setAddServerMenu] = useState(false);
     const [addServerUI, setAddServerUI] = useState(false);
     const [joinServerUI, setJoinServerUI] = useState(false);
     const [channelType, setChannelType] = useState("text");
     const [channelName, setChannelName] = useState("");
+    const [categoryName, setCategoryName] = useState("");
     const [serverName, setServerName] = useState("");
     const [serverCode, setServerCode] = useState("");
     const [preview, setPreview] = useState<string | null>(null);
@@ -87,9 +91,16 @@ export default function ChannelsLayout() {
     const [friends, setFriends] = useState<friend[]>([]);
     const [selectedFriend, setSelectedFriend] = useState<friend | null>(null);
     const [serverOptions, setServerOptions] = useState(false);
+    const [selectedServerOptions, setSelectedServerOptions] = useState(false);
+    const [CategoryOptions, setCategoryOptions] = useState(false);
     const [settingsUI, setSettingsUI] = useState(false);
     const [userCardUI, setUserCardUI] = useState(false);
     const [toggleServers, setToggleServers] = useState(false);
+    const [menu, setMenu] = useState({
+        x: 0,
+        y: 0,
+    });
+
 
 
     useEffect(() => {
@@ -203,7 +214,6 @@ export default function ChannelsLayout() {
 
             const role = serverData?.role;
 
-            // If OWNER → delete everything
             if (role === 'owner') {
 
                 // await supabase.from("channels").delete().eq("serverId", id);
@@ -221,7 +231,6 @@ export default function ChannelsLayout() {
                 setServers(prev => prev.filter(server => server.id !== id));
                 setJoinedServerIds(prev => prev.filter(serverId => serverId !== id));
             } else {
-                // If MEMBER → just leave server
                 const { error } = await supabase
                     .from("members")
                     .delete()
@@ -248,40 +257,75 @@ export default function ChannelsLayout() {
         }
     };
 
-    const addChannel = async (name: string, type: string) => {
-        const id = uuidv4();
+    const handleDeleteCategory = async (categoryId: string) => {
+        try {
+            await supabase.from("category").delete().eq("id", categoryId);
+        } catch (err) {
+            console.error("Unexpected error deleting category:", err);
+        }
+        getCategories();
+    };
+
+    const handleDeleteChannel = async (channelId: string) => {
+        try {
+            await supabase.from("channels").delete().eq("id", channelId);
+        } catch (err) {
+            console.error("Unexpected error deleting channel:", err);
+        }
+        getChannels();
+    };
+
+    const addChannel = async (name: string, type: string, categoryId: string | null) => {
         if (!selectedServerId) {
             return;
         }
-        const { data, error } = await supabase.from("channels").insert({ id: id, name: name, type: type, serverId: selectedServerId });
-        if (error) {
-            return;
-        }
-        getChannels();
-        setAddChannelUI(false);
-    };
-
-    useEffect(() => {
-        // getServers();
-        getChannels();
-    }, []);
-
-    // const getServers = async () => {
-    //     const { data, error } = await supabase.from("server").select('*');
-    //     if (error) {
-    //         alert(JSON.stringify(error));
-    //         return;
-    //     }
-    //     setServers(data);
-    // };
-
-    const getChannels = async () => {
-        const { data, error } = await supabase.from("channels").select('*');
+        const { data, error } = await supabase.from("channels").insert({ name: name, categoryId: categoryId, serverId: selectedServerId });
         if (error) {
             alert(JSON.stringify(error));
             return;
         }
+        getChannels();
+        setAddChannelUI(false);
+        getChannels();
+        setChannelName('');
+        setSelectedCategory(null);
+    };
+
+    const addCategory = async (name: string) => {
+        if (!selectedServerId) {
+            return;
+        }
+        const { data, error } = await supabase.from("category").insert({ name: name, serverId: selectedServerId });
+        if (error) {
+            alert(JSON.stringify(error));
+            return;
+        }
+        getChannels();
+        setAddCategoryUI(false);
+        getCategories();
+        setCategoryName('');
+    };
+
+    useEffect(() => {
+        getChannels();
+        getCategories();
+    }, [selectedServerId]);
+
+    const getChannels = async () => {
+        const { data, error } = await supabase.from("channels").select('*').eq("serverId", selectedServerId);
+        if (error) {
+            console.log(JSON.stringify(error));
+            return;
+        }
         setChannels(data);
+    };
+    const getCategories = async () => {
+        const { data, error } = await supabase.from("category").select('*').eq("serverId", selectedServerId);
+        if (error) {
+            console.log(JSON.stringify(error));
+            return;
+        }
+        setCategories(data);
     };
 
     const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -414,15 +458,44 @@ export default function ChannelsLayout() {
 
     const handleRightClick = (e: React.MouseEvent<HTMLDivElement>) => {
         e.preventDefault();
-        setServerOptions(!serverOptions)
+        setMenu({
+            x: e.clientX,
+            y: e.clientY,
+        });
+        setServerOptions(true)
+    };
+
+    const handleSelectedServerMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setMenu({
+            x: e.clientX,
+            y: e.clientY,
+        });
+        setSelectedServerOptions(true)
+    };
+
+    const handleChannelMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        setSelectedServerOptions(false);
+        setMenu({
+            x: e.clientX,
+            y: e.clientY,
+        });
+        setCategoryOptions(true)
     };
 
     const handleOpenChat = (friend: friend) => {
         setSelectedFriend(friend);
     }
 
+    const handleMenuClose = () => {
+        setServerOptions(false);
+        setSelectedServerOptions(false);
+        setCategoryOptions(false);
+    }
+
     return (
-        <div className="bg-[#121214] w-screen h-dvh overflow-hidden flex flex-col relative">
+        <div onClick={handleMenuClose} className="bg-[#121214] w-screen h-dvh overflow-hidden flex flex-col relative">
 
             {/* Add Server UI */}
             {addServerUI && (<div className="absolute w-full h-full z-999">
@@ -604,7 +677,29 @@ export default function ChannelsLayout() {
                         </div>
                         <div className="flex gap-2">
                             <button onClick={() => setAddChannelUI(false)} className="w-full rounded-md h-10 cursor-pointer text-white bg-white/5">Cancel</button>
-                            <button onClick={() => addChannel(channelName, channelType)} className={`w-full rounded-md h-10 cursor-pointer ${channelName == '' ? 'bg-[#5865f2]/50 text-white/50' : 'bg-[#5865f2] text-white'}`}>Create Channel</button>
+                            <button onClick={() => addChannel(channelName, channelType, selectedCategory)} className={`w-full rounded-md h-10 cursor-pointer ${channelName == '' ? 'bg-[#5865f2]/50 text-white/50' : 'bg-[#5865f2] text-white'}`}>Create Channel</button>
+                        </div>
+                    </div>
+                </div>
+            </div>)}
+
+            {/* Add Category UI */}
+            {addCategoryUI && (<div className="absolute w-full h-full">
+                <div className="relative flex items-center justify-center w-full h-full bg-black/50">
+                    <div className="absolute w-120 h-auto bg-[#242429] rounded-xl p-6 flex flex-col gap-10">
+                        <div className="flex items-center justify-between">
+                            <span className="text-xl font-semibold">Create Category</span>
+                            <IconX onClick={() => setAddCategoryUI(false)} stroke={2} size={20} className="cursor-pointer" />
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <span>Category Name</span>
+                            <div className="flex items-center px-3 gap-2 bg-[#202024] w-full h-12 rounded-md border border-[#303034]">
+                                <input type="text" value={categoryName} onChange={(e) => setCategoryName(e.target.value)} placeholder="New Category" className="h-full w-full focus:outline-0" />
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => setAddCategoryUI(false)} className="w-full rounded-md h-10 cursor-pointer text-white bg-white/5">Cancel</button>
+                            <button onClick={() => addCategory(categoryName)} className={`w-full rounded-md h-10 cursor-pointer ${categoryName == '' ? 'bg-[#5865f2]/50 text-white/50' : 'bg-[#5865f2] text-white'}`}>Create Category</button>
                         </div>
                     </div>
                 </div>
@@ -657,7 +752,7 @@ export default function ChannelsLayout() {
                                 return (
                                     <div key={server.id} onContextMenu={handleRightClick} onClick={() => { setSelectedServer(server); setSelectedChannel(null); setSelectedChannelId(null); setSelectedServerId(server.id) }} className="flex">
                                         <div className="flex gap-2 items-center justify-center group">
-                                            {serverOptions && (<div className="absolute left-15 top-0 bg-[#28282d] w-50 h-auto rounded-md border border-[#303034] p-2 z-10 flex flex-col">
+                                            {serverOptions && (<div style={{ top: menu.y - 35, left: menu.x }} className="absolute bg-[#28282d] w-50 h-auto rounded-md border border-[#303034] p-2 z-10 flex flex-col">
                                                 <button onClick={() => { setServerOptions(false); }} className="hover:bg-[#313135] text-start px-2 items-center w-full h-10 rounded-sm cursor-pointer">Invite to Server</button>
                                                 <div className="w-fullb border border-[#303034]"></div>
                                                 <button onClick={() => { removeServer(server.id); setServerOptions(false) }} className="hover:bg-[#35292d] text-start px-2 items-center w-full h-10 rounded-sm cursor-pointer text-[#d8706e]">Leave Server</button>
@@ -711,7 +806,7 @@ export default function ChannelsLayout() {
                         </div>
 
                         {/* Server - Channels */}
-                        <div className="w-70 h-full border-t border-l rounded-tl-xl border-[#303034] bg-[#121214]">
+                        <div onContextMenu={handleSelectedServerMenu} className="w-70 h-full border-t border-l rounded-tl-xl border-[#303034] bg-[#121214]">
                             {selectedServer.id == 'Me' && (<div className="flex flex-col">
                                 {/* Header */}
                                 <div className="h-12 w-full border-b border-[#303034] px-3 py-2">
@@ -768,18 +863,20 @@ export default function ChannelsLayout() {
                                 {/* Body(Channels) */}
                                 <div className="w-full h-full flex flex-col p-3">
                                     <div className="w-full h-auto flex gap-3 flex-col">
-                                        <div className="flex items-center cursor-pointer text-sm place-content-between text-white/50 hover:text-white">
-                                            <div className="flex items-center gap-2">
-                                                Text Channels
-                                                <IconChevronDown stroke={2} size={15} />
-                                            </div>
-                                            <IconPlus onClick={() => setAddChannelUI(true)} stroke={2} size={15} />
-                                        </div>
+                                        {selectedServerOptions && (<div style={{ top: menu.y - 35, left: menu.x }} className="absolute bg-[#28282d] w-50 h-auto rounded-md border border-[#303034] p-2 z-10 flex flex-col">
+                                            <button onClick={() => { setAddChannelUI(true) }} className="hover:bg-[#313135] text-start px-2 items-center w-full h-10 rounded-sm cursor-pointer">Create Channel</button>
+                                            <div className="w-fullb border border-[#303034]"></div>
+                                            <button onClick={() => { setAddCategoryUI(true) }} className="hover:bg-[#313135] text-start px-2 items-center w-full h-10 rounded-sm cursor-pointer">Create Category</button>
+                                            <div className="w-fullb border border-[#303034]"></div>
+                                            <button onClick={() => { }} className="hover:bg-[#313135] text-start px-2 items-center w-full h-10 rounded-sm cursor-pointer">Invite to Server</button>
+                                        </div>)}
+
                                         {channels
-                                            .filter(channel => channel.serverId === selectedServerId && channel.type === 'text')
+                                            .filter(channel => channel.categoryId === null && channel.serverId === selectedServerId)
                                             .map(channel => {
                                                 return (
                                                     <button
+                                                        onDoubleClick={() => { handleDeleteChannel(channel.id) }}
                                                         key={channel.id}
                                                         onClick={() => {
                                                             setSelectedChannel(channel.name);
@@ -793,25 +890,43 @@ export default function ChannelsLayout() {
                                                     </button>
                                                 )
                                             })}
-                                        <div className="flex items-center cursor-pointer text-sm place-content-between text-white/50 hover:text-white">
-                                            <div className="flex items-center gap-2">
-                                                Voice Channels
-                                                <IconChevronDown stroke={2} size={15} />
-                                            </div>
-                                            <IconPlus onClick={() => setAddChannelUI(true)} stroke={2} size={15} />
-                                        </div>
-                                        {channels
-                                            .filter(channel => channel.serverId === selectedServerId && channel.type === 'voice')
-                                            .map(channel => (
-                                                <button
-                                                    key={channel.id}
-                                                    onClick={() => {setSelectedChannel('Voice Channel WIP'); setToggleServers(!toggleServers)}}
-                                                    className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer hover:text-white ${selectedChannel === channel.id ? 'bg-[#2c2c30] text-white' : 'text-white/50'
-                                                        }`}
-                                                >
-                                                    <IconVolume stroke={2} size={20} /> {channel.name}
-                                                </button>
-                                            ))}
+
+                                        {categories.map((category) => {
+                                            return (
+                                                <div className="flex flex-col gap-2" key={category.id}>
+                                                    <div onDoubleClick={() => { handleDeleteCategory(category.id) }} className="flex items-center cursor-pointer text-sm place-content-between text-white/50 hover:text-white">
+                                                        {CategoryOptions && (<div style={{ top: menu.y - 35, left: menu.x }} className="absolute bg-[#28282d] w-50 h-auto rounded-md border border-[#303034] p-2 z-10 flex flex-col">
+                                                            <button onClick={() => { handleDeleteCategory(category.id) }} className="hover:bg-[#313135] text-start px-2 items-center w-full h-10 rounded-sm cursor-pointer">Delete Category</button>
+                                                            <div className="w-fullb border border-[#303034]"></div>
+                                                        </div>)}
+                                                        <div className="flex items-center gap-2">
+                                                            {category.name}
+                                                            <IconChevronDown stroke={2} size={15} />
+                                                        </div>
+                                                        <IconPlus onClick={() => { setAddChannelUI(true); setSelectedCategory(category.id) }} stroke={2} size={15} />
+                                                    </div>
+                                                    {channels
+                                                        .filter(channel => channel.categoryId === category.id)
+                                                        .map(channel => {
+                                                            return (
+                                                                <button
+                                                                    onDoubleClick={() => { handleDeleteChannel(channel.id) }}
+                                                                    key={channel.id}
+                                                                    onClick={() => {
+                                                                        setSelectedChannel(channel.name);
+                                                                        setSelectedChannelId(channel.id);
+                                                                        setToggleServers(!toggleServers);
+                                                                    }}
+                                                                    className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer w-full hover:text-white ${selectedChannelId === channel.id ? 'bg-[#2c2c30] text-white' : 'text-white/50'
+                                                                        }`}
+                                                                >
+                                                                    <IconHash stroke={2} size={20} /> {channel.name}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                </div>
+                                            )
+                                        })}
                                     </div>
                                 </div>
                             </div>)}
