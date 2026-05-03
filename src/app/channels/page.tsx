@@ -100,6 +100,8 @@ export default function ChannelsLayout() {
         x: 0,
         y: 0,
     });
+    const [categoryShown, setCategoryShown] = useState<Record<string, boolean>>({});
+
 
 
 
@@ -492,6 +494,14 @@ export default function ChannelsLayout() {
         setServerOptions(false);
         setSelectedServerOptions(false);
         setCategoryOptions(false);
+    }
+
+
+    const hide_Unhide = (categoryName: string) => {
+        setCategoryShown(prev => ({
+            ...prev,
+            [categoryName]: !prev[categoryName]
+        }));
     }
 
     return (
@@ -894,36 +904,38 @@ export default function ChannelsLayout() {
                                         {categories.map((category) => {
                                             return (
                                                 <div className="flex flex-col gap-2" key={category.id}>
-                                                    <div onDoubleClick={() => { handleDeleteCategory(category.id) }} className="flex items-center cursor-pointer text-sm place-content-between text-white/50 hover:text-white">
+                                                    <div onClick={() => hide_Unhide(category.name)} onDoubleClick={() => { handleDeleteCategory(category.id) }} className="flex items-center cursor-pointer text-sm place-content-between text-white/50 hover:text-white">
                                                         {CategoryOptions && (<div style={{ top: menu.y - 35, left: menu.x }} className="absolute bg-[#28282d] w-50 h-auto rounded-md border border-[#303034] p-2 z-10 flex flex-col">
                                                             <button onClick={() => { handleDeleteCategory(category.id) }} className="hover:bg-[#313135] text-start px-2 items-center w-full h-10 rounded-sm cursor-pointer">Delete Category</button>
                                                             <div className="w-fullb border border-[#303034]"></div>
                                                         </div>)}
                                                         <div className="flex items-center gap-2">
                                                             {category.name}
-                                                            <IconChevronDown stroke={2} size={15} />
+                                                            <IconChevronDown stroke={2} size={15} className={categoryShown[category.name] ? '' : 'rotate-270'}/>
                                                         </div>
                                                         <IconPlus onClick={() => { setAddChannelUI(true); setSelectedCategory(category.id) }} stroke={2} size={15} />
                                                     </div>
-                                                    {channels
-                                                        .filter(channel => channel.categoryId === category.id)
-                                                        .map(channel => {
-                                                            return (
-                                                                <button
-                                                                    onDoubleClick={() => { handleDeleteChannel(channel.id) }}
-                                                                    key={channel.id}
-                                                                    onClick={() => {
-                                                                        setSelectedChannel(channel.name);
-                                                                        setSelectedChannelId(channel.id);
-                                                                        setToggleServers(!toggleServers);
-                                                                    }}
-                                                                    className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer w-full hover:text-white ${selectedChannelId === channel.id ? 'bg-[#2c2c30] text-white' : 'text-white/50'
-                                                                        }`}
-                                                                >
-                                                                    <IconHash stroke={2} size={20} /> {channel.name}
-                                                                </button>
-                                                            )
-                                                        })}
+                                                    {
+                                                        channels
+                                                            .filter(channel => channel.categoryId === category.id)
+                                                            .map(channel => {
+                                                                return (
+                                                                    <button
+                                                                        //onDoubleClick={() => { handleDeleteChannel(channel.id) }}
+                                                                        key={channel.id}
+                                                                        onClick={() => {
+                                                                            setSelectedChannel(channel.name);
+                                                                            setSelectedChannelId(channel.id);
+                                                                            setToggleServers(!toggleServers);
+                                                                        }}
+                                                                        className={`flex items-center gap-2 p-1 rounded-md hover:bg-white/10 cursor-pointer w-full hover:text-white ${(categoryShown[category.name] || selectedChannelId === channel.id) ? 'flex' : 'hidden'} ${selectedChannelId === channel.id ? 'bg-[#2c2c30] text-white' : 'text-white/50'
+                                                                            }`}
+                                                                    >
+                                                                        <IconHash stroke={2} size={20} /> {channel.name}
+                                                                    </button>
+                                                                )
+                                                            })
+                                                    }
                                                 </div>
                                             )
                                         })}
@@ -1012,6 +1024,6 @@ export default function ChannelsLayout() {
                     <MessagesPage selectedChannel={selectedChannel ?? ""} selectedChannelId={selectedChannelId ?? ""} user={user!} selectedServer={selectedServer} selectedFriend={selectedFriend!} setSelectedFriend={handleOpenChat} toggleServers={toggleServers} setToggleServers={(value) => setToggleServers(value)} />
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

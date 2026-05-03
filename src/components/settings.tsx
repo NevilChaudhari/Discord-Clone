@@ -162,7 +162,7 @@ export default function SettingsUi({ user, close, save, defaultTab = 'My Account
                 {/* Right Area */}
                 <div className={`md:flex flex-col bg-[#202024] h-full w-full ${openedTab ? 'block' : 'hidden'}`}>
                     <div className="flex w-full min-h-12 items-center border-b border-[#303034] px-5 place-content-between">
-                        <div className="flex hover:text-white cursor-pointer" onClick={() => setOpenedTab('')}><IconCaretLeftFilled color="gray"/></div>
+                        <div className="flex hover:text-white cursor-pointer md:hidden" onClick={() => setOpenedTab('')}><IconCaretLeftFilled color="gray"/></div>
                         <label>{openedTab}</label>
                         <div onClick={close} className="flex items-center justify-center w-7 h-7 cursor-pointer hover:bg-[#323237] md:rounded-md"><IconXFilled size={20} /></div>
                     </div>

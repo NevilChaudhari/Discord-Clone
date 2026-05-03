@@ -36,5 +36,9 @@ export default function Main() {
     }
   }, [session, router]);
 
-  return <p>Checking authentication...</p>;
+  return <div className="w-screen h-screen flex items-center justify-center">
+    <div className="w-10 h-10">
+      <img className="w-full h-full object-cover" src="../discord-logo.webp" alt="Direct Message" />
+    </div>
+  </div>;
 }

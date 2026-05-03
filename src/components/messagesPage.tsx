@@ -119,7 +119,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
     useEffect(() => {
         setDirectMessages([]);
     }, [selectedFriend])
-    
+
     useEffect(() => {
         handleFriends();
     }, [user])
@@ -736,6 +736,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
         }
     };
 
+
     return (
         <div className="flex flex-1 flex-col text-white pb-2 w-full h-full">
             {/* image message preview full screen */}
@@ -743,7 +744,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
             {/* header */}
             <div className="h-12 flex items-center p-3 w-full border-b border-[#303034] place-content-between">
                 {selectedServer.id != 'Me' && (<div className="flex gap-3 items-center">
-                    <button onClick={() => { setToggleServers(!toggleServers) }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md md:hidden`}><IconMenu2Filled size={20}/></button>
+                    <button onClick={() => { setToggleServers(!toggleServers) }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md md:hidden`}><IconMenu2Filled size={20} /></button>
                     <div className="w-6 h-6 overflow-hidden rounded-full">
                         <IconHash stroke={2} size={20} color="gray" />
                     </div>
@@ -751,7 +752,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                 </div>)}
 
                 {selectedServer.id == 'Me' && selectedFriend && (<div className="flex gap-3 items-center">
-                    <button onClick={() => { setToggleServers(!toggleServers) }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md md:hidden`}><IconMenu2Filled size={20}/></button>
+                    <button onClick={() => { setToggleServers(!toggleServers) }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md md:hidden`}><IconMenu2Filled size={20} /></button>
                     <div className="w-6 h-6 overflow-hidden rounded-full">
                         <img src={selectedFriend.profile} alt="" className="w-full h-full object-cover" />
                     </div>
@@ -765,7 +766,7 @@ export default function MessagesPage({ selectedChannel, selectedChannelId, user,
                     <IconUserFilled size={20} className="text-white/50 hover:text-white cursor-pointer" onClick={() => { getServerUsers(); setShowUsers(!showUsers) }} />
                 </div>)}
                 {selectedServer.id == 'Me' && !selectedFriend && (<div className="flex gap-5 py-1">
-                    <button onClick={() => { setToggleServers(!toggleServers) }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md md:hidden`}><IconMenu2Filled size={20}/></button>
+                    <button onClick={() => { setToggleServers(!toggleServers) }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md md:hidden`}><IconMenu2Filled size={20} /></button>
                     <button onClick={() => { setFriendsUI('all'); }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md ${friendsUI == 'all' ? 'bg-white/10' : 'bg-transparent'}`}>All</button>
                     <button onClick={() => { setFriendsUI('pending'); handlePendingRequest(); }} className={`cursor-pointer px-2 py-1 hover:bg-white/5 rounded-md ${friendsUI == 'pending' ? 'bg-white/10' : 'bg-transparent'}`}>Pending</button>
                     <button onClick={() => { setFriendsUI('add') }} className={`cursor-pointer px-2 py-1 hover:bg-[#5865f2]/30 rounded-md ${friendsUI == 'add' ? 'bg-[#5865f2]/50' : 'bg-[#5865f2]'}`}>Add Friend</button>
