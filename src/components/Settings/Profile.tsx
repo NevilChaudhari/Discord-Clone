@@ -187,7 +187,7 @@ export default function Profile({ user, edit, save }: Props) {
                 </div>
 
                 {/* Right Side */}
-                <div className="flex flex-col gap-10 h-auto w-full text-start w-[50%] md:sticky top-0 order-1 md:order-2">
+                <div className="flex flex-col gap-10 h-auto w-full text-start md:sticky top-0 order-1 md:order-2">
                     {/* Profile card preview */}
                     <div className="flex flex-col w-full gap-1">
                         <label className="text-white">Preview</label>
@@ -230,13 +230,13 @@ export default function Profile({ user, edit, save }: Props) {
                 </div>
 
                 {/* save UI */}
-                {saveUI && (<div className="flex fixed bottom-20 left-1/2 -translate-x-1/2 bg-[#2c2d32] p-2 rounded-md w-full px-5 md:px-0 md:min-w-[60%] place-content-between items-center shadow-xl">
-                    <label className="text-white text-sm font-semibold">Careful — you have unsaved changes!</label>
+                {saveUI && (<div className="flex fixed bottom-5 md:bottom-20 left-1/2 -translate-x-1/2 bg-[#2c2d32] p-2 rounded-md w-[95%] md:w-[50%] px-5 md:px-5 md:min-w-[60%] place-content-between items-center shadow-xl border border-[#303034]">
+                    <label className="wrap-break-word text-white text-sm font-semibold  truncate">Careful — you have unsaved changes!</label>
                     <div className="flex">
                         <button className="text-[#98afff] hover:text-[#6c79b6] py-2 px-4 rounded-md cursor-pointer hover:underline" onClick={handleReset}>
                             Reset
                         </button>
-                        <button className="bg-[#008545] hover:bg-[#006c37] text-white py-2 px-4 rounded-md cursor-pointer" onClick={() => { handleSave(); save && save(); }}>
+                        <button className="bg-[#008545] hover:bg-[#006c37] text-white py-1 px-1 md:py-2 md:px-4 rounded-md cursor-pointer text-xs md:text-base min-w-20 truncate" onClick={() => { handleSave(); save && save(); }}>
                             Save Changes
                         </button>
                     </div>
